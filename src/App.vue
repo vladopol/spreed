@@ -125,6 +125,9 @@ export default {
 			isRefreshingCurrentConversation: false,
 			skipLeaveWarning: false,
 			recordingConsentGiven: false,
+			// Token of the call kept alive in the background while browsing
+			// another conversation during a call, or null.
+			activeBrowseCallToken: null,
 			debounceRefreshCurrentConversation: () => {},
 		}
 	},
@@ -171,15 +174,18 @@ export default {
 		},
 
 		/**
-		 * Token of the conversation that currently holds a call for this client,
-		 * or null. Unlike `isInCall` (which is about the *viewed* conversation),
-		 * this stays set while browsing other conversations during the call.
+		 * Whether the conversation held in the background during browsing (see
+		 * `activeBrowseCallToken`) still has an ongoing call. Used to tear the
+		 * secondary browse session down when the call ends remotely. Depends on
+		 * the reactive `isInCall` getter for a real token, so it updates when
+		 * the call ends.
 		 *
-		 * @return {string|null} the call's conversation token
+		 * @return {boolean}
 		 */
-		activeCallToken() {
-			const joinedToken = SessionStorage.getItem('joined_conversation')
-			return joinedToken && this.$store.getters.isInCall(joinedToken) ? joinedToken : null
+		browsedCallStillActive() {
+			return this.activeBrowseCallToken
+				? this.$store.getters.isInCall(this.activeBrowseCallToken)
+				: false
 		},
 
 		/**
@@ -223,13 +229,15 @@ export default {
 			},
 		},
 
-		activeCallToken(newValue, oldValue) {
+		browsedCallStillActive(active) {
 			// The call ended (possibly remotely) while browsing another
 			// conversation: drop the secondary browse session and properly join
 			// the conversation that is now being viewed.
-			if (oldValue && !newValue) {
+			if (this.activeBrowseCallToken && !active) {
+				const endedCallToken = this.activeBrowseCallToken
+				this.activeBrowseCallToken = null
 				unmountBrowseSignaling()
-				if (this.token && this.token !== oldValue
+				if (this.token && this.token !== endedCallToken
 					&& !this.tokenStore.currentConversationIsJoined) {
 					this.$store.dispatch('joinConversation', { token: this.token })
 				}
@@ -358,10 +366,15 @@ export default {
 			// secondary lightweight signaling session (new messages, typing),
 			// while the call view is shown again when navigating back to the
 			// call's conversation.
-			const activeCallToken = this.activeCallToken
+			// Read fresh on every navigation (not via a cached computed): the
+			// call token comes from non-reactive SessionStorage, so a computed
+			// would keep a stale value and the guard would not fire.
+			const joinedToken = SessionStorage.getItem('joined_conversation')
+			const activeCallToken = joinedToken && this.$store.getters.isInCall(joinedToken) ? joinedToken : null
 			if (activeCallToken && to.name === 'conversation' && from.params.token !== to.params.token) {
 				if (to.params.token === activeCallToken) {
 					// Returning to the call: drop the secondary browse session.
+					this.activeBrowseCallToken = null
 					unmountBrowseSignaling()
 				} else {
 					// Browsing another conversation during the call.
@@ -372,6 +385,7 @@ export default {
 							return
 						}
 					}
+					this.activeBrowseCallToken = activeCallToken
 					mountBrowseSignaling(to.params.token)
 				}
 				next()
