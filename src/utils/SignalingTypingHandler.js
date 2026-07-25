@@ -99,6 +99,17 @@ SignalingTypingHandler.prototype = {
 		})
 	},
 
+	/**
+	 * Token the received typing status has to be attributed to: the room the
+	 * signaling connection is currently joined to. For the primary connection
+	 * this is the viewed conversation (so behaviour is unchanged), but a
+	 * secondary "browse" connection is joined to a different room than the one
+	 * viewed, so relying on the viewed token would misattribute the status.
+	 */
+	_attributionToken() {
+		return this._signaling?.currentRoomToken ?? this._tokenStore.token
+	},
+
 	_handleMessage(data) {
 		if (data.type !== 'startedTyping' && data.type !== 'stoppedTyping') {
 			return
@@ -110,7 +121,7 @@ SignalingTypingHandler.prototype = {
 		}
 
 		this._store.dispatch('setTyping', {
-			token: this._tokenStore.token,
+			token: this._attributionToken(),
 			sessionId: participant.nextcloudSessionId,
 			typing: data.type === 'startedTyping',
 		})
@@ -132,7 +143,7 @@ SignalingTypingHandler.prototype = {
 	_handleParticipantsLeft(SignalingParticipantList, participants) {
 		for (const participant of participants) {
 			this._store.dispatch('setTyping', {
-				token: this._tokenStore.token,
+				token: this._attributionToken(),
 				sessionId: participant.nextcloudSessionId,
 				typing: false,
 			})
