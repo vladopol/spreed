@@ -192,7 +192,7 @@ import { EventBus } from '../../services/EventBus.ts'
 import { useCallViewStore } from '../../stores/callView.ts'
 import { useParticipantActivityStore } from '../../stores/participantActivity.ts'
 import { useSettingsStore } from '../../stores/settings.ts'
-import { callParticipantCollection, localCallParticipantModel, localMediaModel } from '../../utils/webrtc/index.js'
+import { callParticipantCollection, consumeStartWithoutMediaPending, localCallParticipantModel, localMediaModel } from '../../utils/webrtc/index.js'
 import RemoteVideoBlocker from '../../utils/webrtc/RemoteVideoBlocker.js'
 import { placeholderImage, placeholderModel, placeholderName, placeholderSharedData } from './Grid/gridPlaceholders.ts'
 import { animateTilePromotion } from './Grid/tilePromotionTransition.ts'
@@ -249,8 +249,11 @@ export default {
 		const screenshotMode = ref(false)
 		provide('CallView:screenshotModeEnabled', screenshotMode)
 		const settingsStore = useSettingsStore()
-		// If media settings was not used, we check the global config of default devices state here
-		if (!settingsStore.showMediaSettings && settingsStore.startWithoutMedia) {
+		// If media settings was not used, we check the global config of default devices state here.
+		// This is a call *start* decision, so it is applied only once per call: the call view is
+		// mounted again during an ongoing call when coming back to it after browsing another
+		// conversation, and re-applying it would mute the user every time they come back.
+		if (!settingsStore.showMediaSettings && settingsStore.startWithoutMedia && consumeStartWithoutMediaPending()) {
 			localMediaModel.disableAudio()
 			localMediaModel.disableVideo()
 		}
