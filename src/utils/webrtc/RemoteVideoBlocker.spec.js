@@ -377,5 +377,38 @@ describe('RemoteVideoBlocker', () => {
 
 			expect(callParticipantModel.setVideoBlocked).toHaveBeenCalledTimes(0)
 		})
+
+		test('unblocks the video if it was blocked', () => {
+			vi.advanceTimersByTime(5000)
+
+			expect(callParticipantModel.setVideoBlocked).toHaveBeenCalledTimes(1)
+			expect(callParticipantModel.setVideoBlocked).toHaveBeenCalledWith(true)
+
+			remoteVideoBlocker.destroy()
+
+			expect(callParticipantModel.setVideoBlocked).toHaveBeenCalledTimes(2)
+			expect(callParticipantModel.setVideoBlocked).toHaveBeenNthCalledWith(2, false)
+		})
+
+		test('leaves the video unblocked for a blocker created afterwards', () => {
+			let videoBlocked = false
+			callParticipantModel.setVideoBlocked.mockImplementation((blocked) => {
+				videoBlocked = blocked
+			})
+
+			vi.advanceTimersByTime(5000)
+
+			expect(videoBlocked).toBe(true)
+
+			remoteVideoBlocker.destroy()
+
+			// A blocker created afterwards (as done by a call view mounted
+			// again during the call) assumes that the video is not blocked, so
+			// it would never unblock it on its own.
+			const nextRemoteVideoBlocker = new RemoteVideoBlocker(callParticipantModel)
+			nextRemoteVideoBlocker.increaseVisibleCounter()
+
+			expect(videoBlocked).toBe(false)
+		})
 	})
 })
