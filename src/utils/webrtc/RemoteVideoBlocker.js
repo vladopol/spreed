@@ -54,9 +54,18 @@ export default function RemoteVideoBlocker(callParticipantModel) {
 RemoteVideoBlocker.prototype = {
 
 	destroy() {
-		this._destroyed = true
-
 		clearTimeout(this._blockVideoTimeout)
+		this._blockVideoTimeout = null
+
+		// Leave the video unblocked, as the blocked state belongs to this
+		// RemoteVideoBlocker rather than to the participant. Otherwise a
+		// RemoteVideoBlocker created later for the same participant (for
+		// example when the call view is mounted again after browsing another
+		// conversation during a call) would assume that the video is not
+		// blocked and thus would never unblock it.
+		this._setVideoBlocked(false)
+
+		this._destroyed = true
 	},
 
 	isVideoEnabled() {
