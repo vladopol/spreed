@@ -328,13 +328,15 @@ export default {
 	},
 
 	mounted() {
-		// The button only needs the device list, not a live video preview, so
-		// it does not keep the camera grabbed during the call (see spreed#4008).
-		this.subscribeToDevices(this.conversation.permissions, { videoPreview: false })
+		// The button only needs the device list, not live previews: the volume
+		// it shows comes from the call's own microphone track. So it does not
+		// keep the camera grabbed during the call (see spreed#4008) nor grabs
+		// the microphone a second time next to the call's own track.
+		this.subscribeToDevices(this.conversation.permissions, { videoPreview: false, audioPreview: false })
 	},
 
 	beforeUnmount() {
-		this.unsubscribeFromDevices(this.conversation.permissions, { videoPreview: false })
+		this.unsubscribeFromDevices(this.conversation.permissions, { videoPreview: false, audioPreview: false })
 	},
 
 	methods: {

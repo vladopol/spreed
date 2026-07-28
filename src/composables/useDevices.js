@@ -23,6 +23,16 @@ const subscribersPermissions = []
  * the video is disabled (see spreed#4008).
  */
 let videoPreviewSubscribersCount = 0
+/**
+ * Number of active subscribers that request a live audio preview stream.
+ * As with the video preview, in-call control buttons only need the device list;
+ * they show the volume of the call's own microphone track, not of a preview
+ * one. Grabbing a second microphone stream for them keeps the microphone
+ * captured twice for the whole call, and the "getUserMedia" call needed for it
+ * can stop the call's own microphone track (see
+ * "MediaDevicesManager._stopIncompatibleTracks"), which mutes the user.
+ */
+let audioPreviewSubscribersCount = 0
 const videoElement = ref(null)
 
 /**
@@ -153,12 +163,16 @@ export const useDevices = createSharedComposable(function() {
 	 * @param {number} permissions - requested permission (for call - attendee check, for device preview - MAX_DEFAULT)
 	 * @param {object} [options] - subscription options
 	 * @param {boolean} [options.videoPreview] - whether a live video preview stream is needed (false for in-call control buttons)
+	 * @param {boolean} [options.audioPreview] - whether a live audio preview stream is needed (false for in-call control buttons)
 	 * @public
 	 */
-	function subscribeToDevices(permissions = PARTICIPANT.PERMISSIONS.MAX_DEFAULT, { videoPreview = true } = {}) {
+	function subscribeToDevices(permissions = PARTICIPANT.PERMISSIONS.MAX_DEFAULT, { videoPreview = true, audioPreview = true } = {}) {
 		subscribersPermissions.push(permissions)
 		if (videoPreview) {
 			videoPreviewSubscribersCount++
+		}
+		if (audioPreview) {
+			audioPreviewSubscribersCount++
 		}
 		if (!initialized) {
 			initializeDevices()
@@ -176,9 +190,10 @@ export const useDevices = createSharedComposable(function() {
 	 * @param {number} permissions bitmask, must match the value passed to subscribeToDevices
 	 * @param {object} [options] - subscription options, must match the value passed to subscribeToDevices
 	 * @param {boolean} [options.videoPreview] - whether a live video preview stream was requested
+	 * @param {boolean} [options.audioPreview] - whether a live audio preview stream was requested
 	 * @public
 	 */
-	function unsubscribeFromDevices(permissions = PARTICIPANT.PERMISSIONS.MAX_DEFAULT, { videoPreview = true } = {}) {
+	function unsubscribeFromDevices(permissions = PARTICIPANT.PERMISSIONS.MAX_DEFAULT, { videoPreview = true, audioPreview = true } = {}) {
 		const index = subscribersPermissions.indexOf(permissions)
 		if (index === -1) {
 			console.error('Attempt to unsubscribe from devices with unknown permissions')
@@ -188,6 +203,9 @@ export const useDevices = createSharedComposable(function() {
 		subscribersPermissions.splice(index, 1)
 		if (videoPreview && videoPreviewSubscribersCount > 0) {
 			videoPreviewSubscribersCount--
+		}
+		if (audioPreview && audioPreviewSubscribersCount > 0) {
+			audioPreviewSubscribersCount--
 		}
 		if (subscribersPermissions.length === 0) {
 			stopDevices()
@@ -228,7 +246,7 @@ export const useDevices = createSharedComposable(function() {
 	 * Start streams that are permitted and not yet running
 	 */
 	function startPermittedStreams() {
-		if (hasAudioPermission() && !audioStream.value && !pendingGetUserMediaAudioCount) {
+		if (shouldGrabAudioPreview() && !audioStream.value && !pendingGetUserMediaAudioCount) {
 			updateAudioStream()
 		}
 		if (shouldGrabVideoPreview() && !videoStream.value && !pendingGetUserMediaVideoCount) {
@@ -240,7 +258,7 @@ export const useDevices = createSharedComposable(function() {
 	 * Stop streams that are no longer permitted by any subscriber
 	 */
 	function stopForbiddenStreams() {
-		if (!hasAudioPermission()) {
+		if (!shouldGrabAudioPreview()) {
 			stopAudioStream()
 		}
 		if (!shouldGrabVideoPreview()) {
@@ -277,6 +295,16 @@ export const useDevices = createSharedComposable(function() {
 	 */
 	function shouldGrabVideoPreview() {
 		return hasVideoPermission() && videoPreviewSubscribersCount > 0
+	}
+
+	/**
+	 * Checks whether a live audio preview stream should be grabbed: at least one
+	 * subscriber must both allow audio and actually request a preview. In-call
+	 * control buttons do not request a preview, so the microphone is not grabbed
+	 * a second time just for them.
+	 */
+	function shouldGrabAudioPreview() {
+		return hasAudioPermission() && audioPreviewSubscribersCount > 0
 	}
 
 	/**
@@ -440,7 +468,7 @@ export const useDevices = createSharedComposable(function() {
 			return
 		}
 
-		if (!hasAudioPermission()) {
+		if (!shouldGrabAudioPreview()) {
 			return
 		}
 
