@@ -164,6 +164,32 @@ let startedCall = null
 let failedToStartCall = null
 
 /**
+ * Whether the default device state ("start without media") still has to be
+ * applied for the call that is currently being joined.
+ *
+ * The call view applies that default when it is mounted, but the call view is
+ * mounted again during an ongoing call when the user comes back to the call
+ * after browsing another conversation. Re-applying the default then would mute
+ * the user (and disable their camera) on every return, so it is consumed once
+ * per call.
+ */
+let startWithoutMediaPending = false
+
+/**
+ * Returns whether the default device state has still to be applied for the
+ * ongoing call, and marks it as applied.
+ *
+ * @return {boolean} true only for the first call view mounted in a call
+ */
+function consumeStartWithoutMediaPending() {
+	const pending = startWithoutMediaPending
+
+	startWithoutMediaPending = false
+
+	return pending
+}
+
+/**
  * @param {object} signaling The signaling object
  * @param {object} configuration Media to connect with
  * @param {boolean} silent Whether the call should trigger a notifications and
@@ -242,6 +268,10 @@ async function signalingJoinConversation(token, sessionId) {
 async function signalingJoinCall(token, flags, silent, recordingConsent, silentFor, options = {}) {
 	if (tokensInSignaling[token]) {
 		pendingJoinCallToken = token
+
+		// A new call is being joined, so the call view mounted for it has to
+		// apply the default device state again.
+		startWithoutMediaPending = true
 
 		setupWebRtc()
 
@@ -552,6 +582,7 @@ export {
 	callAnalyzer,
 	callParticipantCollection,
 	callParticipantsAudioPlayer,
+	consumeStartWithoutMediaPending,
 	localCallParticipantModel,
 	localMediaModel,
 	mediaDevicesManager,
