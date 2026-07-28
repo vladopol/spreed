@@ -533,6 +533,16 @@ export default {
 
 		callParticipantCollection.off('remove', this._lowerHandWhenParticipantLeaves)
 
+		// The RemoteVideoBlockers belong to this call view, but the participant
+		// models outlive it: the call view is unmounted while the call goes on
+		// when browsing another conversation during the call. They have to be
+		// destroyed, as otherwise they would keep blocking the remote videos
+		// after the call view is gone, and the blockers created by the next
+		// call view would conflict with them.
+		Object.values(this.sharedDatas).forEach((sharedData) => {
+			sharedData.remoteVideoBlocker.destroy()
+		})
+
 		unsubscribe('switch-screen-to-id', this._switchScreenToId)
 	},
 
