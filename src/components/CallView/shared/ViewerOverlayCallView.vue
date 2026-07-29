@@ -120,6 +120,7 @@ import LocalVideoControlButton from './LocalVideoControlButton.vue'
 import ScreenShare from './ScreenShare.vue'
 import VideoVue from './VideoVue.vue'
 import { useCallViewStore } from '../../../stores/callView.ts'
+import { useTokenStore } from '../../../stores/token.ts'
 import { localCallParticipantModel, localMediaModel } from '../../../utils/webrtc/index.js'
 
 export default {
@@ -186,6 +187,7 @@ export default {
 	setup() {
 		return {
 			callViewStore: useCallViewStore(),
+			tokenStore: useTokenStore(),
 		}
 	},
 
@@ -239,6 +241,12 @@ export default {
 				OCA.Viewer.close()
 			}
 			this.callViewStore.setIsViewerOverlay(false)
+
+			if (this.token !== this.tokenStore.token) {
+				// The call is overlaid on another conversation being browsed;
+				// going back to it is what maximising means here.
+				this.$router.push({ name: 'conversation', params: { token: this.token } })
+			}
 		},
 
 		updatePosition() {
