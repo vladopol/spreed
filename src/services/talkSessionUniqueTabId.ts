@@ -4,7 +4,11 @@
  */
 
 import axios from '@nextcloud/axios'
+import pinia from '../stores/pinia.ts'
+import { useTokenStore } from '../stores/token.ts'
 import SessionStorage from './SessionStorage.js'
+
+const tokenStore = useTokenStore(pinia)
 
 const X_NEXTCLOUD_TALK_SESSION_TAB_ID = 'x-nextcloud-talk-session-tab-id'
 const BASE62_CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
@@ -96,38 +100,14 @@ export function resetBrowseSessionTabId(): void {
 }
 
 /**
- * Conversation currently browsed through the secondary Talk session, or null.
+ * Whether a request targets the conversation served by the secondary Talk
+ * session (`tokenStore.browseConversationToken`), and therefore has to be sent
+ * with the secondary tab id.
  *
- * Every request targeting this conversation must be routed to that session:
- * the primary session may hold an ongoing call in another conversation, and a
- * request arriving with the primary tab id for a conversation the primary
- * session is not in gets a 404 - which the app treats as "the session died" and
- * recovers from by re-joining, dragging the primary signaling session (and
- * therefore the call) into the browsed conversation.
- */
-let browseSessionToken: string | null = null
-
-/**
- * Mark (or unmark, with null) the conversation that is browsed through the
- * secondary Talk session.
- *
- * @param token conversation token, or null when no conversation is browsed
- */
-export function setBrowseSessionToken(token: string | null): void {
-	browseSessionToken = token
-}
-
-/**
- * The conversation currently browsed through the secondary Talk session.
- */
-export function getBrowseSessionToken(): string | null {
-	return browseSessionToken
-}
-
-/**
- * Whether a request targets the conversation currently browsed through the
- * secondary Talk session, and therefore has to be sent with the secondary tab
- * id.
+ * A request arriving with the primary tab id for a conversation the primary
+ * session is not in gets a 404, which the app takes for a lost session and
+ * recovers from by re-joining - dragging the primary signaling session, and
+ * with it the call, into that conversation.
  *
  * The token is either a path segment (`.../room/{token}/participants/state`,
  * `.../chat/{token}`) or a query parameter (`.../signaling/settings?token=...`),
@@ -141,12 +121,13 @@ export function isBrowseSessionRequest(config: {
 	url?: string
 	params?: unknown
 }): boolean {
-	if (!browseSessionToken) {
+	const browseToken = tokenStore.browseConversationToken
+	if (!browseToken) {
 		return false
 	}
 
 	if (config.params && typeof config.params === 'object') {
-		if (Object.values(config.params as Record<string, unknown>).includes(browseSessionToken)) {
+		if (Object.values(config.params as Record<string, unknown>).includes(browseToken)) {
 			return true
 		}
 	}
@@ -155,7 +136,7 @@ export function isBrowseSessionRequest(config: {
 		return false
 	}
 
-	return config.url.split(/[/?&=#]/).includes(browseSessionToken)
+	return config.url.split(/[/?&=#]/).includes(browseToken)
 }
 
 /**

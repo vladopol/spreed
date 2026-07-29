@@ -237,7 +237,7 @@ export default {
 				this.activeBrowseCallToken = null
 				destroyBrowseSignaling()
 				if (this.token && this.token !== endedCallToken
-					&& !this.tokenStore.currentConversationIsJoined) {
+					&& !this.tokenStore.currentConversationIsJoinedWithCall) {
 					this.$store.dispatch('joinConversation', { token: this.token })
 				}
 			}

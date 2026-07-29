@@ -8,8 +8,10 @@ import { generateOcsUrl } from '@nextcloud/router'
 import { PRIVACY } from '../../constants.ts'
 import { getTalkConfig } from '../../services/CapabilitiesManager.ts'
 import { fetchSignalingSettings } from '../../services/signalingService.js'
-import { getBrowseSessionRequestConfig, getBrowseSessionToken, setBrowseSessionToken } from '../../services/talkSessionUniqueTabId.ts'
+import { getBrowseSessionRequestConfig } from '../../services/talkSessionUniqueTabId.ts'
 import store from '../../store/index.js'
+import pinia from '../../stores/pinia.ts'
+import { useTokenStore } from '../../stores/token.ts'
 import Signaling from '../signaling.js'
 import SignalingTypingHandler from '../SignalingTypingHandler.js'
 
@@ -35,6 +37,8 @@ import SignalingTypingHandler from '../SignalingTypingHandler.js'
  */
 
 const enableTypingIndicators = getTalkConfig('local', 'chat', 'typing-privacy') === PRIVACY.PUBLIC
+
+const tokenStore = useTokenStore(pinia)
 
 let browseSignaling = null
 let browseTypingHandler = null
@@ -98,8 +102,8 @@ async function restLeaveBrowseSession(token) {
  * @param {string} token conversation token
  */
 function clearRoutingFor(token) {
-	if (getBrowseSessionToken() === token) {
-		setBrowseSessionToken(null)
+	if (tokenStore.browseConversationToken === token) {
+		tokenStore.browseConversationToken = ''
 	}
 }
 
@@ -128,6 +132,15 @@ async function leaveBrowseRoom() {
 
 	browseToken = null
 	clearRoutingFor(token)
+}
+
+/**
+ * Send the typing status of the conversation served by the secondary session.
+ *
+ * @param {boolean} typing whether the current participant is typing
+ */
+function setBrowseTyping(typing) {
+	browseTypingHandler?.setTyping(typing)
 }
 
 /**
@@ -213,7 +226,7 @@ async function openConnection(token) {
 async function joinBrowseRoom(token) {
 	// Route this conversation's requests to the secondary session from here on,
 	// including the REST join itself.
-	setBrowseSessionToken(token)
+	tokenStore.browseConversationToken = token
 
 	const sessionId = await restJoinBrowseSession(token)
 	if (!sessionId) {
@@ -262,7 +275,7 @@ function mountBrowseSignaling(token) {
 	// Set synchronously, before the caller lets the view start fetching the
 	// conversation: those requests must already be routed to the secondary
 	// session, not to the primary one holding the call.
-	setBrowseSessionToken(token)
+	tokenStore.browseConversationToken = token
 
 	pendingOperation = pendingOperation.then(async () => {
 		if (browseToken === token && browseSignaling) {
@@ -320,5 +333,6 @@ export {
 	destroyBrowseSignaling,
 	getBrowseSignalingToken,
 	mountBrowseSignaling,
+	setBrowseTyping,
 	unmountBrowseSignaling,
 }
