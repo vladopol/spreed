@@ -65,7 +65,7 @@ import { useSidebarStore } from './stores/sidebar.ts'
 import { useTokenStore } from './stores/token.ts'
 import { checkBrowser } from './utils/browserCheck.ts'
 import { hasExternalCallService } from './utils/conversation.ts'
-import { mountBrowseSignaling, unmountBrowseSignaling } from './utils/webrtc/browseSignaling.js'
+import { destroyBrowseSignaling, mountBrowseSignaling, unmountBrowseSignaling } from './utils/webrtc/browseSignaling.js'
 import { signalingKill } from './utils/webrtc/index.js'
 
 /** Internal handlers for 'joined-conversation' watcher (voice-, breakout- rooms) */
@@ -174,10 +174,10 @@ export default {
 		},
 
 		/**
-		 * Whether the conversation held in the background during browsing (see
-		 * `activeBrowseCallToken`) still has an ongoing call. Used to tear the
-		 * secondary browse session down when the call ends remotely. Depends on
-		 * the reactive `isInCall` getter for a real token, so it updates when
+		 * Whether the call the secondary browse session accompanies (see
+		 * `activeBrowseCallToken`) is still ongoing. Used to disconnect that
+		 * session once the call ends, including when it ends remotely. Depends
+		 * on the reactive `isInCall` getter for a real token, so it updates when
 		 * the call ends.
 		 *
 		 * @return {boolean}
@@ -230,13 +230,13 @@ export default {
 		},
 
 		browsedCallStillActive(active) {
-			// The call ended (possibly remotely) while browsing another
-			// conversation: drop the secondary browse session and properly join
-			// the conversation that is now being viewed.
+			// The call ended (possibly remotely): the secondary session has
+			// nothing left to accompany, so disconnect it. If another
+			// conversation is being viewed at that moment, join it properly.
 			if (this.activeBrowseCallToken && !active) {
 				const endedCallToken = this.activeBrowseCallToken
 				this.activeBrowseCallToken = null
-				unmountBrowseSignaling()
+				destroyBrowseSignaling()
 				if (this.token && this.token !== endedCallToken
 					&& !this.tokenStore.currentConversationIsJoined) {
 					this.$store.dispatch('joinConversation', { token: this.token })
@@ -373,8 +373,10 @@ export default {
 			const activeCallToken = joinedToken && this.$store.getters.isInCall(joinedToken) ? joinedToken : null
 			if (activeCallToken && to.name === 'conversation' && from.params.token !== to.params.token) {
 				if (to.params.token === activeCallToken) {
-					// Returning to the call: drop the secondary browse session.
-					this.activeBrowseCallToken = null
+					// Returning to the call: leave the browsed conversation, but
+					// keep the secondary connection for the next one. It is kept
+					// tracked so it can be disconnected once the call ends.
+					this.activeBrowseCallToken = activeCallToken
 					unmountBrowseSignaling()
 				} else {
 					// Browsing another conversation during the call.
