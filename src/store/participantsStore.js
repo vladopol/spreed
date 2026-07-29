@@ -761,6 +761,11 @@ const actions = {
 		EventBus.on('signaling-users-in-room', handleUsersInRoom)
 		EventBus.on('signaling-users-changed', handleUsersChanged)
 
+		// From here on a call is ongoing in this conversation. Recorded before
+		// the request so that the signaling connection is pinned to it even if
+		// anything races with the join.
+		tokenStore.activeCallToken = token
+
 		try {
 			const actualFlags = await joinCall(token, flags, silent, recordingConsent, silentFor, options)
 			const updatedData = {
@@ -777,6 +782,9 @@ const actions = {
 			const callViewStore = useCallViewStore()
 			callViewStore.handleJoinCall(getters.conversation(token))
 		} catch (e) {
+			if (tokenStore.activeCallToken === token) {
+				tokenStore.activeCallToken = ''
+			}
 			console.error('Error while joining call: ', e)
 		}
 	},
@@ -786,10 +794,14 @@ const actions = {
 			console.error('Trying to leave call without sessionId')
 		}
 
+		// Leaving must work even when the participant is not (or no longer) in
+		// the known participants list: that is exactly the state a desynced
+		// session leaves behind, and refusing to leave would strand the user in
+		// a call the server does not know about, with a hang up button that
+		// appears to do nothing.
 		const attendee = getters.findParticipant(token, participantIdentifier)
 		if (!attendee) {
-			console.error('Participant not found for conversation', token, participantIdentifier)
-			return
+			console.info('Leaving the call of', token, 'without a known participant entry')
 		}
 
 		const callViewStore = useCallViewStore()
@@ -803,17 +815,23 @@ const actions = {
 
 		await leaveCall(token, all)
 
-		const updatedData = {
-			inCall: PARTICIPANT.CALL_FLAG.DISCONNECTED,
+		if (tokenStore.activeCallToken === token) {
+			tokenStore.activeCallToken = ''
 		}
-		commit('updateParticipant', { token, attendeeId: attendee.attendeeId, updatedData })
+
+		if (attendee) {
+			const updatedData = {
+				inCall: PARTICIPANT.CALL_FLAG.DISCONNECTED,
+			}
+			commit('updateParticipant', { token, attendeeId: attendee.attendeeId, updatedData })
+		}
 
 		// clear raised hands as they were specific to the call
 		useParticipantActivityStore().purgeRaisedHandsState()
 
 		commit('setInCall', {
 			token,
-			sessionId: participantIdentifier.sessionId,
+			sessionId: participantIdentifier?.sessionId,
 			flags: PARTICIPANT.CALL_FLAG.DISCONNECTED,
 		})
 	},
