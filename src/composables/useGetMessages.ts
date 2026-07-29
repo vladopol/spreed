@@ -603,9 +603,10 @@ export function useGetMessagesProvider() {
 	/**
 	 * Check whether chat relay is supported
 	 *
-	 * @param features
+	 * @param payload
+	 * @param payload."0" - list of supported features
 	 */
-	async function checkChatRelaySupport(features: string[]) {
+	async function checkChatRelaySupport([features]: [string[], string]) {
 		if (features.includes('chat-relay')) {
 			chatRelaySupported = true
 		} else {
