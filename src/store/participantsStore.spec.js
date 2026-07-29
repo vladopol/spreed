@@ -34,12 +34,17 @@ import SessionStorage from '../services/SessionStorage.js'
 import { useActorStore } from '../stores/actor.ts'
 import { useGuestNameStore } from '../stores/guestName.ts'
 import { useParticipantActivityStore } from '../stores/participantActivity.ts'
+import appPinia from '../stores/pinia.ts'
 import { useSessionStore } from '../stores/session.ts'
 import { useTokenStore } from '../stores/token.ts'
 import { generateOCSErrorResponse, generateOCSResponse } from '../test-helpers.js'
 import { convertToUnix } from '../utils/formattedTime.ts'
 import participantsStore from './participantsStore.js'
 import storeConfig from './storeConfig.js'
+
+// The store bound to the app's Pinia instance, which is the one the
+// participants store writes the ongoing call token to.
+const appTokenStore = useTokenStore(appPinia)
 
 vi.mock('../services/participantsService', () => ({
 	promoteToModerator: vi.fn(),
@@ -737,6 +742,52 @@ describe('participantsStore', () => {
 				},
 			])
 			expect(participantActivityStore.purgeRaisedHandsState).toHaveBeenCalledTimes(1)
+		})
+
+		test('leaves call of a participant that is not in the list anymore', async () => {
+			appTokenStore.activeCallToken = TOKEN
+
+			await store.dispatch('leaveCall', {
+				token: TOKEN,
+				participantIdentifier: {
+					attendeeId: 42,
+					sessionId: 'session-id-gone',
+				},
+			})
+
+			// A desynced session must not strand the user in a call they cannot
+			// get out of: the call is left and no longer considered ongoing.
+			expect(leaveCall).toHaveBeenCalledWith(TOKEN, false)
+			expect(store.getters.isInCall(TOKEN)).toBe(false)
+			expect(appTokenStore.activeCallToken).toBe('')
+		})
+
+		test('records and forgets the conversation the call is in', async () => {
+			appTokenStore.activeCallToken = ''
+
+			await store.dispatch('joinCall', {
+				token: TOKEN,
+				participantIdentifier: {
+					attendeeId: 1,
+					sessionId: 'session-id-1',
+				},
+				flags: PARTICIPANT.CALL_FLAG.WITH_AUDIO,
+				silent: false,
+			})
+
+			// What pins the signaling connection to the call: it must not depend
+			// on the joined conversation, which session recovery rewrites.
+			expect(appTokenStore.activeCallToken).toBe(TOKEN)
+
+			await store.dispatch('leaveCall', {
+				token: TOKEN,
+				participantIdentifier: {
+					attendeeId: 1,
+					sessionId: 'session-id-1',
+				},
+			})
+
+			expect(appTokenStore.activeCallToken).toBe('')
 		})
 	})
 

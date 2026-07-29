@@ -18,6 +18,21 @@ export const useTokenStore = defineStore('token', () => {
 	 * A in the signaling server.
 	 */
 	const lastJoinedConversationToken = ref<'' | (string & {})>('')
+	/**
+	 * The conversation whose call this tab has joined, '' when not in a call.
+	 *
+	 * Unlike `lastJoinedConversationToken`, which follows the signaling session
+	 * from room to room and is reset by session recovery, this is written only
+	 * when the user joins or leaves a call. Anything that has to know "a call is
+	 * ongoing" - most importantly to keep the single signaling connection pinned
+	 * to it - has to rely on this, so that no recovery path can silently
+	 * disarm the protection by rewriting the joined conversation.
+	 *
+	 * Written directly (not through an action) by the participants store when a
+	 * call is joined and left: calling an action of this store would rebind the
+	 * active Pinia instance for whoever comes next.
+	 */
+	const activeCallToken = ref<'' | (string & {})>('')
 
 	const currentConversationIsJoined = computed(() => token.value !== '' && lastJoinedConversationToken.value === token.value)
 
@@ -66,6 +81,7 @@ export const useTokenStore = defineStore('token', () => {
 		token,
 		fileIdForToken,
 		lastJoinedConversationToken,
+		activeCallToken,
 		currentConversationIsJoined,
 
 		updateToken,
