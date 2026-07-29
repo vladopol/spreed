@@ -83,7 +83,7 @@ export const useSettingsStore = defineStore('settings', () => {
 	 * @param payload emitted payload (array)
 	 * @param payload."0" received signaling settings upon joining
 	 */
-	function setDialInInfoFromSettings([settings]: [SignalingSettings]) {
+	function setDialInInfoFromSettings([settings]: [SignalingSettings, string]) {
 		dialInInfo.value = settings.sipDialinInfo
 	}
 

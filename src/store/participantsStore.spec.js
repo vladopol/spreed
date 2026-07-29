@@ -632,7 +632,7 @@ describe('participantsStore', () => {
 		}
 
 		const finishConnectingWithUsers = (event, payload) => {
-			EventBus.emit(event, [payload])
+			EventBus.emit(event, [payload, TOKEN])
 			expect(store.getters.isInCall(TOKEN)).toBe(true)
 			expect(store.getters.isConnecting(TOKEN)).toBe(false)
 			expect(store.getters.isJoiningCall(TOKEN)).toBe(false)
@@ -647,7 +647,7 @@ describe('participantsStore', () => {
 		}
 
 		const assertParticipantsListReceivedBeforeJoiningCall = (event, payload) => {
-			EventBus.emit(event, [payload])
+			EventBus.emit(event, [payload, TOKEN])
 			expect(store.getters.isJoiningCall(TOKEN)).toBe(true)
 			expect(store.getters.isConnecting(TOKEN)).toBe(true)
 			expect(store.getters.isInCall(TOKEN)).toBe(false)
@@ -856,7 +856,7 @@ describe('participantsStore', () => {
 			expect(store.getters.isInCall(TOKEN)).toBe(false)
 
 			// Act: signaling reports us in the call before the request resolves
-			EventBus.emit('signaling-users-changed', [usersChangedPayload])
+			EventBus.emit('signaling-users-changed', [usersChangedPayload, TOKEN])
 
 			// Assert: UI switched to "in call" optimistically
 			expect(store.getters.isInCall(TOKEN)).toBe(true)
@@ -880,7 +880,7 @@ describe('participantsStore', () => {
 		test('optimistic join is rolled back when the request fails', () => {
 			// Act: request is pending, then optimistic join from signaling
 			dispatchJoinCall()
-			EventBus.emit('signaling-users-changed', [usersChangedPayload])
+			EventBus.emit('signaling-users-changed', [usersChangedPayload, TOKEN])
 			expect(store.getters.isInCall(TOKEN)).toBe(true)
 
 			// Act: the delayed request ultimately fails

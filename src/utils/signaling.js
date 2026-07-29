@@ -117,33 +117,16 @@ Signaling.Base.prototype._trigger = function(ev, args) {
 		}
 	}
 
-	// A secondary "browse" signaling connection (used to keep receiving live
-	// updates for a conversation that is only being browsed while a call is
-	// ongoing in another conversation) must not leak its events onto the global
-	// EventBus, as those are consumed app-wide and would interfere with the
-	// primary connection that holds the call. Only the explicitly allow-listed
-	// events are forwarded; local per-instance handlers always run.
-	if (this._eventBusEmitAllowlist && !this._eventBusEmitAllowlist.has(ev)) {
-		return
-	}
-
 	// Convert webrtc event names to kebab-case for "vue/custom-event-name-casing"
 	const kebabCase = (string) => string
 		.replace(/([a-z])([A-Z])/g, '$1-$2')
 		.replace(/[\s_]+/g, '-')
 		.toLowerCase()
-	EventBus.emit('signaling-' + kebabCase(ev), args)
-}
-
-/**
- * Restrict which events of this signaling instance are forwarded to the global
- * EventBus. Pass an iterable of camelCase event names (as passed to _trigger),
- * or null to forward everything (the default).
- *
- * @param {Iterable<string>|null} events allow-listed event names
- */
-Signaling.Base.prototype.setEventBusEmitAllowlist = function(events) {
-	this._eventBusEmitAllowlist = events ? new Set(events) : null
+	// The conversation the event belongs to always travels with it, as its last
+	// argument: handlers on the global EventBus are app-wide, while there can be
+	// two connections in two different conversations at the same time, so
+	// "the current room" alone does not identify what an event is about.
+	EventBus.emit('signaling-' + kebabCase(ev), [...(args ?? []), this.currentRoomToken])
 }
 
 Signaling.Base.prototype.setSettings = function(settings) {
@@ -477,7 +460,7 @@ Signaling.Internal.prototype._joinRoomSuccess = function(token, sessionId) {
 	this._trigger('sessionId', [this.sessionId])
 	this._startPullingMessages()
 	// Event needed to inform about chat relay support
-	this._trigger('supportedFeatures', [])
+	this._trigger('supportedFeatures', [[]])
 }
 
 Signaling.Internal.prototype._doLeaveRoom = function(token) {
@@ -1355,7 +1338,7 @@ Signaling.Standalone.prototype.joinResponseReceived = function(data, token) {
 		this.roomCollection.sort()
 	}
 
-	this._trigger('supportedFeatures', Object.keys(this.features))
+	this._trigger('supportedFeatures', [Object.keys(this.features)])
 }
 
 Signaling.Standalone.prototype._doLeaveRoom = function(token) {
@@ -1554,7 +1537,7 @@ Signaling.Standalone.prototype.processRoomListEvent = function(data) {
 					return
 				}
 				console.error('User or session was removed from the conversation, redirecting')
-				EventBus.emit('deleted-session-detected')
+				EventBus.emit('deleted-session-detected', this.currentRoomToken)
 				break
 			}
 

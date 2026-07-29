@@ -13,12 +13,14 @@ import { useStore } from 'vuex'
 import ConfirmDialog from '../components/UIShared/ConfirmDialog.vue'
 import { EventBus } from '../services/EventBus.ts'
 import SessionStorage from '../services/SessionStorage.js'
+import { useTokenStore } from '../stores/token.ts'
 
 /**
  * Check whether the conflicting session detected or not, and navigate to another page
  */
 export function useSessionIssueHandler(): DeepReadonly<Ref<boolean>> {
 	const store = useStore()
+	const tokenStore = useTokenStore()
 
 	const isLeavingAfterSessionIssue = ref(false)
 
@@ -101,8 +103,18 @@ export function useSessionIssueHandler(): DeepReadonly<Ref<boolean>> {
 	/**
 	 * Handle deleted session
 	 * TODO: current workaround is to force page refresh to kill stray WebRTC connections
+	 *
+	 * @param roomToken
 	 */
-	function deletedSessionTriggered() {
+	function deletedSessionTriggered(roomToken?: string) {
+		if (roomToken && roomToken === tokenStore.browseConversationToken) {
+			// Removed from a conversation that is only being browsed while a
+			// call runs in another one. The session that matters - the call's -
+			// is untouched, so only that conversation goes away.
+			EventBus.emit('should-refresh-conversations', { all: true })
+			return
+		}
+
 		redirectTo('/apps/spreed/not-found')
 	}
 
