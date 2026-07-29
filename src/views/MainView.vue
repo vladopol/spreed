@@ -12,7 +12,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import CallFailedDialog from '../components/CallView/CallFailedDialog.vue'
 import CallView from '../components/CallView/CallView.vue'
-import OngoingCallBar from '../components/CallView/OngoingCallBar.vue'
 import ChatView from '../components/ChatView.vue'
 import ExternalCallView from '../components/ExternalCallView.vue'
 import LobbyScreen from '../components/LobbyScreen.vue'
@@ -23,7 +22,9 @@ import { useJoinCall } from '../composables/useJoinCall.ts'
 import { watchJoinedConversation } from '../composables/useJoinedConversation.ts'
 import { CALL, CONVERSATION } from '../constants.ts'
 import { useActorStore } from '../stores/actor.ts'
+import { useCallViewStore } from '../stores/callView.ts'
 import { useSettingsStore } from '../stores/settings.ts'
+import { useTokenStore } from '../stores/token.ts'
 import { hasExternalCallService, isChannelConversation, isConversationPhoneRoom } from '../utils/conversation.ts'
 
 const props = defineProps<{
@@ -37,6 +38,8 @@ const router = useRouter()
 const route = useRoute()
 const actorStore = useActorStore()
 const settingsStore = useSettingsStore()
+const tokenStore = useTokenStore()
+const callViewStore = useCallViewStore()
 
 /** Internal handlers for 'joined-conversation' watcher (direct-call) */
 let unwatchJoinedConversation: WatchStopHandle | undefined
@@ -53,6 +56,15 @@ function stopWatchingJoinedConversation() {
 const isInLobby = computed(() => store.getters.isInLobby)
 const connectionFailed = computed(() => store.getters.connectionFailed(props.token))
 const isVoiceRoom = computed(() => Boolean(store.getters.conversation(props.token)?.attributes & CONVERSATION.ATTRIBUTE.VOICE_ROOM))
+const callInAnotherConversation = computed(() => Boolean(tokenStore.activeCallToken)
+	&& tokenStore.activeCallToken !== props.token)
+
+watch(callInAnotherConversation, (value) => {
+	// The call view of a conversation that is not the viewed one is only ever
+	// shown as the compact overlay
+	callViewStore.setIsViewerOverlay(value)
+}, { immediate: true })
+
 const isInExternalCall = computed(() => {
 	const conversation = store.getters.conversation(props.token) as Conversation | undefined
 	return hasExternalCallService(conversation) && isInCall.value
@@ -136,10 +148,14 @@ function handleDirectCall(routeToken: string) {
 		<LobbyScreen v-if="isInLobby" />
 		<template v-else>
 			<TopBar v-if="!isInExternalCall" :isInCall="isInCall" />
-			<OngoingCallBar />
 			<ExternalCallView v-if="isInExternalCall" :token="token" />
 			<CallView v-else-if="isInCall" :token="token" />
-			<ChatView v-else />
+			<template v-else>
+				<ChatView />
+				<!-- The call runs in another conversation: keep it on screen,
+					as the overlay the viewer uses for the same situation -->
+				<CallView v-if="callInAnotherConversation" :token="tokenStore.activeCallToken" />
+			</template>
 			<PollViewer />
 			<CallFailedDialog v-if="connectionFailed" :token="token" />
 		</template>
