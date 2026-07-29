@@ -5,7 +5,8 @@
 
 import axios from '@nextcloud/axios'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { getBrowseSessionToken } from '../../services/talkSessionUniqueTabId.ts'
+import appPinia from '../../stores/pinia.ts'
+import { useTokenStore } from '../../stores/token.ts'
 import Signaling from '../signaling.js'
 import {
 	destroyBrowseSignaling,
@@ -45,6 +46,8 @@ vi.mock('../SignalingTypingHandler.js', () => ({
 vi.mock('../signaling.js', () => ({
 	default: { createConnection: vi.fn() },
 }))
+
+const tokenStore = useTokenStore(appPinia)
 
 const CALL_ROOM = 'callroom1'
 const ROOM_B = 'roomb0002'
@@ -121,23 +124,23 @@ describe('browseSignaling', () => {
 		// Marked synchronously: the view starts fetching the conversation before
 		// the join completes, and those requests must already be routed.
 		const mounted = mountBrowseSignaling(ROOM_B)
-		expect(getBrowseSessionToken()).toBe(ROOM_B)
+		expect(tokenStore.browseConversationToken).toBe(ROOM_B)
 		await mounted
-		expect(getBrowseSessionToken()).toBe(ROOM_B)
+		expect(tokenStore.browseConversationToken).toBe(ROOM_B)
 
 		await unmountBrowseSignaling()
-		expect(getBrowseSessionToken()).toBeNull()
+		expect(tokenStore.browseConversationToken).toBe('')
 	})
 
 	test('keeps routing to the new conversation while the previous one is left', async () => {
 		await mountBrowseSignaling(ROOM_B)
 
 		const switched = mountBrowseSignaling(ROOM_C)
-		expect(getBrowseSessionToken()).toBe(ROOM_C)
+		expect(tokenStore.browseConversationToken).toBe(ROOM_C)
 		await switched
 
 		// Leaving ROOM_B must not clear the routing claimed by ROOM_C.
-		expect(getBrowseSessionToken()).toBe(ROOM_C)
+		expect(tokenStore.browseConversationToken).toBe(ROOM_C)
 	})
 
 	test('falls back to the primary session when there is no High-Performance Backend', async () => {
@@ -148,7 +151,7 @@ describe('browseSignaling', () => {
 
 		expect(await mountBrowseSignaling(ROOM_B)).toBe(false)
 		expect(Signaling.createConnection).not.toHaveBeenCalled()
-		expect(getBrowseSessionToken()).toBeNull()
+		expect(tokenStore.browseConversationToken).toBe('')
 		expect(getBrowseSignalingToken()).toBeNull()
 	})
 
