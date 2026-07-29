@@ -12,6 +12,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import CallFailedDialog from '../components/CallView/CallFailedDialog.vue'
 import CallView from '../components/CallView/CallView.vue'
+import OngoingCallBar from '../components/CallView/OngoingCallBar.vue'
 import ChatView from '../components/ChatView.vue'
 import ExternalCallView from '../components/ExternalCallView.vue'
 import LobbyScreen from '../components/LobbyScreen.vue'
@@ -134,6 +135,7 @@ function handleDirectCall(routeToken: string) {
 		<LobbyScreen v-if="isInLobby" />
 		<template v-else>
 			<TopBar v-if="!isInExternalCall" :isInCall="isInCall" />
+			<OngoingCallBar />
 			<ExternalCallView v-if="isInExternalCall" :token="token" />
 			<CallView v-else-if="isInCall" :token="token" />
 			<ChatView v-else />

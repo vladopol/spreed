@@ -9,6 +9,8 @@ import BrowserStorage from '../../services/BrowserStorage.js'
 import { getTalkConfig } from '../../services/CapabilitiesManager.ts'
 import { fetchSignalingSettings } from '../../services/signalingService.js'
 import store from '../../store/index.js'
+import pinia from '../../stores/pinia.ts'
+import { useTokenStore } from '../../stores/token.ts'
 import { isIOS, isSafari } from '../browserCheck.ts'
 import CancelableRequest from '../CancelableRequest.ts'
 import Encryption from '../e2ee/encryption.js'
@@ -41,6 +43,8 @@ let speakingStatusHandler = null
 // included here for the time being until signaling and WebRTC are split.
 const enableTypingIndicators = getTalkConfig('local', 'chat', 'typing-privacy') === PRIVACY.PUBLIC
 const signalingTypingHandler = enableTypingIndicators ? new SignalingTypingHandler(store) : null
+
+const tokenStore = useTokenStore(pinia)
 
 let cancelFetchSignalingSettings = null
 let signaling = null
@@ -244,6 +248,18 @@ function setupWebRtc() {
  * @return {Promise<void>}
  */
 async function signalingJoinConversation(token, sessionId) {
+	const activeCallToken = tokenStore.activeCallToken
+	if (activeCallToken && activeCallToken !== token) {
+		// There is only one signaling connection and it can only be in one room
+		// at a time, so moving it to another conversation would drop the call.
+		// Callers reach this both deliberately (browsing another conversation
+		// during a call) and by accident: a request answered with 404 for a
+		// conversation the primary Talk session is not in is taken for a lost
+		// session and "recovered" from by re-joining. Neither may cost the call.
+		console.info('Not moving the signaling session to', token, '- a call is ongoing in', activeCallToken)
+		return
+	}
+
 	await connectSignaling(token)
 	if (tokensInSignaling[token]) {
 		await signaling.joinRoom(token, sessionId)
@@ -532,6 +548,15 @@ async function signalingLeaveCall(token, all = false) {
  * @return {Promise<void>}
  */
 async function signalingLeaveConversation(token) {
+	if (tokenStore.activeCallToken === token) {
+		// Leaving the room the call is held in would end the call. The call is
+		// left first (which clears the active call token), so reaching this with
+		// the call still ongoing means something is leaving the conversation
+		// behind the call's back.
+		console.info('Not leaving', token, '- its call is still ongoing')
+		return
+	}
+
 	if (tokensInSignaling[token]) {
 		await signaling.leaveRoom(token)
 	}
