@@ -183,9 +183,8 @@ export default {
 		 * @return {boolean}
 		 */
 		browsedCallStillActive() {
-			return this.activeBrowseCallToken
-				? this.$store.getters.isInCall(this.activeBrowseCallToken)
-				: false
+			return !!this.activeBrowseCallToken
+				&& this.tokenStore.activeCallToken === this.activeBrowseCallToken
 		},
 
 		/**
@@ -366,11 +365,7 @@ export default {
 			// secondary lightweight signaling session (new messages, typing),
 			// while the call view is shown again when navigating back to the
 			// call's conversation.
-			// Read fresh on every navigation (not via a cached computed): the
-			// call token comes from non-reactive SessionStorage, so a computed
-			// would keep a stale value and the guard would not fire.
-			const joinedToken = SessionStorage.getItem('joined_conversation')
-			const activeCallToken = joinedToken && this.$store.getters.isInCall(joinedToken) ? joinedToken : null
+			const activeCallToken = this.tokenStore.activeCallToken
 			if (activeCallToken && to.name === 'conversation' && from.params.token !== to.params.token) {
 				if (to.params.token === activeCallToken) {
 					// Returning to the call: leave the browsed conversation, but
