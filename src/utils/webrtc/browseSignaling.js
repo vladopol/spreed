@@ -8,7 +8,7 @@ import { generateOcsUrl } from '@nextcloud/router'
 import { PRIVACY } from '../../constants.ts'
 import { getTalkConfig } from '../../services/CapabilitiesManager.ts'
 import { fetchSignalingSettings } from '../../services/signalingService.js'
-import { getBrowseSessionRequestConfig, resetBrowseSessionTabId } from '../../services/talkSessionUniqueTabId.ts'
+import { getBrowseSessionRequestConfig, getBrowseSessionToken, setBrowseSessionToken } from '../../services/talkSessionUniqueTabId.ts'
 import store from '../../store/index.js'
 import Signaling from '../signaling.js'
 import SignalingTypingHandler from '../SignalingTypingHandler.js'
@@ -23,6 +23,11 @@ import SignalingTypingHandler from '../SignalingTypingHandler.js'
  * leak its events onto the global EventBus (only the chat-relay related ones,
  * which are token-scoped, reach the app). The primary connection - and the
  * call it holds - is therefore never touched.
+ *
+ * The connection outlives room switches: browsing from one conversation to
+ * another leaves and joins rooms on the same connection, exactly like the
+ * primary one does. It is disconnected only when the call it was accompanying
+ * is over (destroyBrowseSignaling).
  *
  * Only the High-Performance Backend (standalone signaling) supports this. With
  * the internal signaling there is no cheap second connection, so callers should
@@ -85,44 +90,72 @@ async function restLeaveBrowseSession(token) {
 }
 
 /**
- * Tear down the current secondary session, if any.
+ * Stop routing requests for the given conversation to the secondary session,
+ * unless a newer browse has claimed it in the meantime: switching from one
+ * browsed conversation to another marks the new one synchronously, before the
+ * previous one is left.
+ *
+ * @param {string} token conversation token
  */
-async function teardown() {
+function clearRoutingFor(token) {
+	if (getBrowseSessionToken() === token) {
+		setBrowseSessionToken(null)
+	}
+}
+
+/**
+ * Leave the browsed room, keeping the secondary connection alive for the next
+ * conversation. Mirrors what the primary connection does on navigation.
+ */
+async function leaveBrowseRoom() {
 	clearTimeout(participantsRefreshTimeout)
 	participantsRefreshTimeout = null
 
-	if (browseTypingHandler) {
-		browseTypingHandler.destroy()
-		browseTypingHandler = null
+	const token = browseToken
+	if (!token) {
+		return
 	}
 
-	const token = browseToken
 	if (browseSignaling) {
 		try {
 			await browseSignaling.leaveRoom(token)
 		} catch (error) {
 			console.warn('[browseSignaling] leaveRoom failed', error)
 		}
-		browseSignaling.disconnect()
-		browseSignaling = null
 	}
 
-	if (token) {
-		await restLeaveBrowseSession(token)
-	}
+	await restLeaveBrowseSession(token)
 
 	browseToken = null
-	resetBrowseSessionTabId()
+	clearRoutingFor(token)
 }
 
 /**
- * Bring up a secondary session for the given conversation.
- *
- * @param {string} token conversation token
- * @return {Promise<boolean>} true if a live session was established, false if
- *         the caller should fall back to REST/polling browsing
+ * Tear the secondary session down completely, including its connection.
  */
-async function setup(token) {
+async function destroy() {
+	await leaveBrowseRoom()
+
+	if (browseTypingHandler) {
+		browseTypingHandler.destroy()
+		browseTypingHandler = null
+	}
+
+	if (browseSignaling) {
+		browseSignaling.disconnect()
+		browseSignaling = null
+	}
+}
+
+/**
+ * Open the secondary connection. Done once per call, then reused for every
+ * browsed conversation.
+ *
+ * @param {string} token conversation token the settings are fetched for
+ * @return {Promise<boolean>} true if the connection is up, false if the caller
+ *         should fall back to REST/polling browsing
+ */
+async function openConnection(token) {
 	const settings = await fetchSignalingSettingsForBrowse(token)
 	if (!settings) {
 		return false
@@ -131,11 +164,6 @@ async function setup(token) {
 	if (settings.signalingMode === 'internal') {
 		// No High-Performance Backend: a second connection would be a second
 		// long-polling loop with no chat-relay. Fall back to REST/polling.
-		return false
-	}
-
-	const sessionId = await restJoinBrowseSession(token)
-	if (!sessionId) {
 		return false
 	}
 
@@ -155,20 +183,43 @@ async function setup(token) {
 	// its participant list fresh from the browse session's own room events, so
 	// participant-dependent UI works while browsing - notably the typing
 	// indicator, which matches typing signals against known participant sessions.
+	// Bound once to the connection and always acting on whichever conversation is
+	// browsed at the time the event arrives.
 	const refreshBrowseParticipants = () => {
-		if (browseToken !== token) {
+		const currentToken = browseToken
+		if (!currentToken) {
 			return
 		}
 		clearTimeout(participantsRefreshTimeout)
 		participantsRefreshTimeout = setTimeout(() => {
-			if (browseToken === token) {
-				store.dispatch('fetchParticipants', { token })
+			if (browseToken === currentToken) {
+				store.dispatch('fetchParticipants', { token: currentToken })
 			}
 		}, 500)
 	}
 	browseSignaling.on('usersInRoom', refreshBrowseParticipants)
 	browseSignaling.on('usersJoined', refreshBrowseParticipants)
 	browseSignaling.on('usersLeft', refreshBrowseParticipants)
+
+	return true
+}
+
+/**
+ * Join a conversation on the (already open) secondary connection.
+ *
+ * @param {string} token conversation token
+ * @return {Promise<boolean>} whether the conversation is now browsed live
+ */
+async function joinBrowseRoom(token) {
+	// Route this conversation's requests to the secondary session from here on,
+	// including the REST join itself.
+	setBrowseSessionToken(token)
+
+	const sessionId = await restJoinBrowseSession(token)
+	if (!sessionId) {
+		clearRoutingFor(token)
+		return false
+	}
 
 	browseToken = token
 
@@ -208,39 +259,65 @@ async function fetchSignalingSettingsForBrowse(token) {
  * @return {Promise<boolean>} whether a live session is active for the token
  */
 function mountBrowseSignaling(token) {
+	// Set synchronously, before the caller lets the view start fetching the
+	// conversation: those requests must already be routed to the secondary
+	// session, not to the primary one holding the call.
+	setBrowseSessionToken(token)
+
 	pendingOperation = pendingOperation.then(async () => {
 		if (browseToken === token && browseSignaling) {
 			return true
 		}
 		if (browseToken) {
-			await teardown()
+			await leaveBrowseRoom()
 		}
-		return setup(token)
+		if (!browseSignaling && !await openConnection(token)) {
+			// No live session: the conversation is browsed over REST on the
+			// primary session, so requests must not carry the secondary tab id.
+			clearRoutingFor(token)
+			return false
+		}
+		return joinBrowseRoom(token)
 	}).catch((error) => {
 		console.error('[browseSignaling] mount failed', error)
+		clearRoutingFor(token)
 		return false
 	})
 	return pendingOperation
 }
 
 /**
- * Tear down the secondary session (call when returning to the call
- * conversation or when the call ends).
+ * Leave the browsed conversation, keeping the secondary connection for the next
+ * one. Call when returning to the call's conversation.
  *
  * @return {Promise<void>}
  */
 function unmountBrowseSignaling() {
 	pendingOperation = pendingOperation.then(async () => {
-		if (browseToken) {
-			await teardown()
-		}
+		await leaveBrowseRoom()
 	}).catch((error) => {
 		console.error('[browseSignaling] unmount failed', error)
 	})
 	return pendingOperation
 }
 
+/**
+ * Tear the secondary session down completely, connection included. Call when
+ * the call that it was accompanying is over.
+ *
+ * @return {Promise<void>}
+ */
+function destroyBrowseSignaling() {
+	pendingOperation = pendingOperation.then(async () => {
+		await destroy()
+	}).catch((error) => {
+		console.error('[browseSignaling] destroy failed', error)
+	})
+	return pendingOperation
+}
+
 export {
+	destroyBrowseSignaling,
 	getBrowseSignalingToken,
 	mountBrowseSignaling,
 	unmountBrowseSignaling,
