@@ -17,6 +17,7 @@ import Encryption from '../e2ee/encryption.js'
 import Signaling from '../signaling.js'
 import SignalingTypingHandler from '../SignalingTypingHandler.js'
 import CallAnalyzer from './analyzers/CallAnalyzer.js'
+import { setBrowseTyping } from './browseSignaling.js'
 import CallParticipantsAudioPlayer from './CallParticipantsAudioPlayer.js'
 import MediaDevicesManager from './MediaDevicesManager.js'
 import { CallParticipantCollection } from './models/CallParticipantCollection.js'
@@ -600,6 +601,14 @@ async function signalingSendCallMessage(data) {
  * @param {boolean} typing whether the current participant is typing.
  */
 function signalingSetTyping(typing) {
+	if (tokenStore.currentConversationIsBrowsed) {
+		// The viewed conversation is served by the secondary session, so the
+		// status has to go out on that connection - the primary one is in the
+		// call's conversation, where the user is not typing.
+		setBrowseTyping(typing)
+		return
+	}
+
 	signalingTypingHandler?.setTyping(typing)
 }
 

@@ -4,14 +4,16 @@
  */
 
 import { afterEach, describe, expect, test } from 'vitest'
+import appPinia from '../stores/pinia.ts'
+import { useTokenStore } from '../stores/token.ts'
 import {
 	getBrowseSessionRequestConfig,
 	getBrowseSessionTabId,
-	getBrowseSessionToken,
 	isBrowseSessionRequest,
 	resetBrowseSessionTabId,
-	setBrowseSessionToken,
 } from './talkSessionUniqueTabId.ts'
+
+const tokenStore = useTokenStore(appPinia)
 
 const HEADER = 'x-nextcloud-talk-session-tab-id'
 const BROWSED = 'browsed01'
@@ -54,16 +56,16 @@ describe('talkSessionUniqueTabId - browse session', () => {
 
 describe('talkSessionUniqueTabId - routing requests by conversation', () => {
 	afterEach(() => {
-		setBrowseSessionToken(null)
+		tokenStore.browseConversationToken = ''
 	})
 
 	test('no conversation is browsed by default', () => {
-		expect(getBrowseSessionToken()).toBeNull()
+		expect(tokenStore.browseConversationToken).toBe('')
 		expect(isBrowseSessionRequest({ url: `/ocs/v2.php/apps/spreed/api/v4/room/${BROWSED}/participants/state` })).toBe(false)
 	})
 
 	test('routes requests targeting the browsed conversation by path segment', () => {
-		setBrowseSessionToken(BROWSED)
+		tokenStore.browseConversationToken = BROWSED
 
 		// The very request that broke the call in production: on window
 		// visibility changes the app marks the *viewed* conversation's session
@@ -75,7 +77,7 @@ describe('talkSessionUniqueTabId - routing requests by conversation', () => {
 	})
 
 	test('routes requests targeting the browsed conversation by query parameter', () => {
-		setBrowseSessionToken(BROWSED)
+		tokenStore.browseConversationToken = BROWSED
 
 		expect(isBrowseSessionRequest({
 			url: '/ocs/v2.php/apps/spreed/api/v3/signaling/settings',
@@ -84,7 +86,7 @@ describe('talkSessionUniqueTabId - routing requests by conversation', () => {
 	})
 
 	test('leaves requests for any other conversation on the primary session', () => {
-		setBrowseSessionToken(BROWSED)
+		tokenStore.browseConversationToken = BROWSED
 
 		// Notably the call itself: hanging up must not go through the
 		// secondary session.
@@ -98,14 +100,14 @@ describe('talkSessionUniqueTabId - routing requests by conversation', () => {
 	})
 
 	test('does not match a token that is only a substring of a path segment', () => {
-		setBrowseSessionToken(BROWSED)
+		tokenStore.browseConversationToken = BROWSED
 
 		expect(isBrowseSessionRequest({ url: `/ocs/v2.php/apps/spreed/api/v4/room/${BROWSED}x/participants/state` })).toBe(false)
 		expect(isBrowseSessionRequest({ url: `/ocs/v2.php/apps/spreed/api/v4/room/x${BROWSED}` })).toBe(false)
 	})
 
 	test('handles requests without a url or params', () => {
-		setBrowseSessionToken(BROWSED)
+		tokenStore.browseConversationToken = BROWSED
 
 		expect(isBrowseSessionRequest({})).toBe(false)
 		expect(isBrowseSessionRequest({ params: undefined })).toBe(false)

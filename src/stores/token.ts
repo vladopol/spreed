@@ -19,6 +19,16 @@ export const useTokenStore = defineStore('token', () => {
 	 */
 	const lastJoinedConversationToken = ref<'' | (string & {})>('')
 	/**
+	 * The conversation joined by the secondary signaling session, '' when there
+	 * is none.
+	 *
+	 * While a call is ongoing the primary session stays pinned to the call's
+	 * conversation, so another conversation the user opens is served by a second
+	 * session instead. Both are "the current room" for different purposes, and
+	 * this is what tells them apart app-wide.
+	 */
+	const browseConversationToken = ref<'' | (string & {})>('')
+	/**
 	 * The conversation whose call this tab has joined, '' when not in a call.
 	 *
 	 * Unlike `lastJoinedConversationToken`, which follows the signaling session
@@ -34,7 +44,17 @@ export const useTokenStore = defineStore('token', () => {
 	 */
 	const activeCallToken = ref<'' | (string & {})>('')
 
-	const currentConversationIsJoined = computed(() => token.value !== '' && lastJoinedConversationToken.value === token.value)
+	/** The viewed conversation is served by the secondary signaling session */
+	const currentConversationIsBrowsed = computed(() => token.value !== '' && browseConversationToken.value === token.value)
+	/** The viewed conversation is joined by the primary signaling session */
+	const currentConversationIsJoinedWithCall = computed(() => token.value !== '' && lastJoinedConversationToken.value === token.value)
+	/**
+	 * The viewed conversation is joined, by whichever session serves it. Chat,
+	 * typing and participants work in both cases; only what needs the call's
+	 * own session (starting a call, WebRTC) has to look at
+	 * `currentConversationIsJoinedWithCall`.
+	 */
+	const currentConversationIsJoined = computed(() => currentConversationIsJoinedWithCall.value || currentConversationIsBrowsed.value)
 
 	EventBus.on('signaling-join-room', handleSignalingJoinRoom)
 
@@ -81,7 +101,10 @@ export const useTokenStore = defineStore('token', () => {
 		token,
 		fileIdForToken,
 		lastJoinedConversationToken,
+		browseConversationToken,
 		activeCallToken,
+		currentConversationIsBrowsed,
+		currentConversationIsJoinedWithCall,
 		currentConversationIsJoined,
 
 		updateToken,
