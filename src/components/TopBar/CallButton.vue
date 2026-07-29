@@ -97,7 +97,9 @@ const startCallButtonDisabled = computed(() => {
 		|| isInLobby.value
 		|| conversation.value.readOnly
 		|| isNextcloudTalkHashDirty.value
-		|| !tokenStore.currentConversationIsJoined
+		// Starting a call needs the primary session, which a browsed
+		// conversation does not have while a call runs elsewhere
+		|| !tokenStore.currentConversationIsJoinedWithCall
 		|| blockCalls
 })
 const showSplitStartCallButton = computed(() => {
