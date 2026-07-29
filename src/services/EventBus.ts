@@ -24,7 +24,7 @@ export type Events = {
 	'signaling-message-received': { token: string, message: ChatMessage, lastCommonReadMessage?: number }
 	'conversations-received': { singleConversation?: Conversation, fromBrowserStorage?: boolean }
 	'session-conflict-confirmation': string
-	'deleted-session-detected': void
+	'deleted-session-detected': string | undefined
 	'duplicate-session-detected': void
 	'editing-message': void
 	'editing-message-processing': { messageId: number, value: boolean }
@@ -42,19 +42,19 @@ export type Events = {
 	'scroll-chat-to-bottom': { smooth?: boolean, force?: boolean }
 	'should-refresh-chat-messages': void
 	'should-refresh-conversations': { token: string, properties: Partial<Conversation> } | { all: true } | void
-	'signaling-join-call': [string, number]
-	'signaling-join-call-failed': [string, { meta: components['schemas']['OCSMeta'], data: { error: string } }]
-	'signaling-join-room': [string]
-	'signaling-participant-list-changed': void
-	'signaling-participant-list-updated': void
+	'signaling-join-call': [string, number, string]
+	'signaling-join-call-failed': [string, { meta: components['schemas']['OCSMeta'], data: { error: string } }, string]
+	'signaling-join-room': [string, string]
+	'signaling-participant-list-changed': [string]
+	'signaling-participant-list-updated': [string]
 	'signaling-recording-status-changed': [string, number]
-	'signaling-settings-updated': [SignalingSettings]
-	'signaling-users-changed': [StandaloneSignalingUpdateSession[]]
-	'signaling-users-in-room': [InternalSignalingSession[]]
-	'signaling-users-joined': [StandaloneSignalingJoinSession[]]
-	'signaling-users-left': [string[]]
-	'signaling-all-users-changed-in-call-to-disconnected': void
-	'signaling-supported-features': string[]
+	'signaling-settings-updated': [SignalingSettings, string]
+	'signaling-users-changed': [StandaloneSignalingUpdateSession[], string]
+	'signaling-users-in-room': [InternalSignalingSession[], string]
+	'signaling-users-joined': [StandaloneSignalingJoinSession[], string]
+	'signaling-users-left': [string[], string]
+	'signaling-all-users-changed-in-call-to-disconnected': [string]
+	'signaling-supported-features': [string[], string]
 	'smart-picker-open': void
 	'switch-to-conversation': { token: string }
 	'talk:poll-added': { token: string, message: ChatMessage }

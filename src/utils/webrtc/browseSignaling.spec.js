@@ -62,7 +62,6 @@ function createConnectionStub() {
 		leaveRoom: vi.fn(() => Promise.resolve()),
 		disconnect: vi.fn(),
 		on: vi.fn(),
-		setEventBusEmitAllowlist: vi.fn(),
 	}
 }
 

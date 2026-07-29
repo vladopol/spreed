@@ -68,8 +68,14 @@ export const useTokenStore = defineStore('token', () => {
 	 * @param payload
 	 * @param payload."0" - conversation token
 	 */
-	function handleSignalingJoinRoom([token]: [string]) {
-		updateLastJoinedConversationToken(token)
+	function handleSignalingJoinRoom([joinedToken]: [string, string]) {
+		if (joinedToken === browseConversationToken.value) {
+			// The secondary session joined the conversation being browsed; the
+			// primary one is still in the call's conversation.
+			return
+		}
+
+		updateLastJoinedConversationToken(joinedToken)
 	}
 
 	/**
