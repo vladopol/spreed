@@ -58,7 +58,7 @@ function useGetParticipantsComposable(activeTab = ref('participants')) {
 		EventBus.on('signaling-users-changed', handleUsersUpdated)
 		EventBus.on('signaling-users-left', handleUsersLeft)
 		EventBus.on('signaling-all-users-changed-in-call-to-disconnected', handleUsersDisconnected)
-		EventBus.on('signaling-participant-list-updated', throttleUpdateParticipants)
+		EventBus.on('signaling-participant-list-updated', handleParticipantListChanged)
 		EventBus.on('signaling-users-changed', checkCurrentUserPermissions)
 	}
 
@@ -67,9 +67,23 @@ function useGetParticipantsComposable(activeTab = ref('participants')) {
 	 *
 	 * @param payload
 	 * @param payload."0" - users list
+	 * @param payload."1" - conversation the message came for
 	 */
-	function handleUsersUpdated([users]: [SignalingSessionPayload[]]) {
-		if (sessionStore.updateSessions(token.value, users)) {
+	function handleUsersUpdated([users, roomToken]: [SignalingSessionPayload[], string]) {
+		if (!roomToken) {
+			return
+		}
+
+		const sessionsChanged = sessionStore.updateSessions(roomToken, users)
+
+		if (roomToken !== token.value) {
+			// A conversation that is not the viewed one - the call's, while
+			// another conversation is being browsed. Its sessions are kept up to
+			// date, but it must not trigger a refetch of the viewed one.
+			return
+		}
+
+		if (sessionsChanged) {
 			throttleUpdateParticipants()
 		} else {
 			throttleLongUpdate()
@@ -81,12 +95,13 @@ function useGetParticipantsComposable(activeTab = ref('participants')) {
 	 *
 	 * @param payload
 	 * @param payload."0" - users list
+	 * @param payload."1" - conversation the message came for
 	 */
-	async function checkCurrentUserPermissions([users]: [StandaloneSignalingUpdateSession[]]) {
-		if (!token.value || !conversation.value) {
-			// No token / conversation to associate message with (user left the room)
-			// TODO: should instead compare if signaling message came for the right room (need event payload change):
-			// data.event.update.roomid === token.value
+	async function checkCurrentUserPermissions([users, roomToken]: [StandaloneSignalingUpdateSession[], string]) {
+		if (!roomToken || roomToken !== token.value || !conversation.value) {
+			// No conversation to associate the message with, or it came for
+			// another one than the viewed one (the call's, while this one is
+			// being browsed) - its permissions are re-read when it is opened.
 			return
 		}
 
@@ -113,18 +128,49 @@ function useGetParticipantsComposable(activeTab = ref('participants')) {
 	 *
 	 * @param payload
 	 * @param payload."0" - users list
+	 * @param payload."1" - conversation the message came for
 	 */
-	function handleUsersLeft([sessionIds]: [StandaloneSignalingLeaveSession[]]) {
-		sessionStore.updateSessionsLeft(token.value, sessionIds)
-		throttleLongUpdate()
+	function handleUsersLeft([sessionIds, roomToken]: [StandaloneSignalingLeaveSession[], string]) {
+		if (!roomToken) {
+			return
+		}
+
+		sessionStore.updateSessionsLeft(roomToken, sessionIds)
+
+		if (roomToken === token.value) {
+			throttleLongUpdate()
+		}
 	}
 
 	/**
 	 * Patch participants list from signaling messages (end call for everyone)
+	 *
+	 * @param payload
+	 * @param payload."0" - conversation the message came for
 	 */
-	function handleUsersDisconnected() {
-		sessionStore.updateParticipantsDisconnectedFromStandaloneSignaling(token.value)
-		throttleLongUpdate()
+	function handleUsersDisconnected([roomToken]: [string]) {
+		if (!roomToken) {
+			return
+		}
+
+		sessionStore.updateParticipantsDisconnectedFromStandaloneSignaling(roomToken)
+
+		if (roomToken === token.value) {
+			throttleLongUpdate()
+		}
+	}
+
+	/**
+	 * Refresh the participants list of the viewed conversation, if the signaling
+	 * message came for it.
+	 *
+	 * @param payload
+	 * @param payload."0" - conversation the message came for
+	 */
+	function handleParticipantListChanged([roomToken]: [string]) {
+		if (roomToken === token.value) {
+			throttleUpdateParticipants()
+		}
 	}
 
 	/**
@@ -138,8 +184,8 @@ function useGetParticipantsComposable(activeTab = ref('participants')) {
 		EventBus.off('signaling-users-changed', handleUsersUpdated)
 		EventBus.off('signaling-users-left', handleUsersLeft)
 		EventBus.off('signaling-all-users-changed-in-call-to-disconnected', handleUsersDisconnected)
-		EventBus.off('signaling-participant-list-updated', throttleUpdateParticipants)
-		EventBus.off('signaling-participant-list-changed', throttleUpdateParticipants)
+		EventBus.off('signaling-participant-list-updated', handleParticipantListChanged)
+		EventBus.off('signaling-participant-list-changed', handleParticipantListChanged)
 		EventBus.off('signaling-users-changed', checkCurrentUserPermissions)
 	}
 

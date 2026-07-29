@@ -21,10 +21,10 @@ import SignalingTypingHandler from '../SignalingTypingHandler.js'
  * only being *browsed* during a call that is held by the primary connection in
  * another conversation.
  *
- * It intentionally never joins a call, never sets up WebRTC/media, and does not
- * leak its events onto the global EventBus (only the chat-relay related ones,
- * which are token-scoped, reach the app). The primary connection - and the
- * call it holds - is therefore never touched.
+ * It intentionally never joins a call and never sets up WebRTC/media. Its
+ * events reach the app like the primary connection's do, carrying the
+ * conversation they are about, so consumers act on the right one. The primary
+ * connection - and the call it holds - is therefore never touched.
  *
  * The connection outlives room switches: browsing from one conversation to
  * another leaves and joins rooms on the same connection, exactly like the
@@ -43,7 +43,6 @@ const tokenStore = useTokenStore(pinia)
 let browseSignaling = null
 let browseTypingHandler = null
 let browseToken = null
-let participantsRefreshTimeout = null
 /** Serializes mount/switch/unmount so overlapping navigations cannot race. */
 let pendingOperation = Promise.resolve()
 
@@ -112,9 +111,6 @@ function clearRoutingFor(token) {
  * conversation. Mirrors what the primary connection does on navigation.
  */
 async function leaveBrowseRoom() {
-	clearTimeout(participantsRefreshTimeout)
-	participantsRefreshTimeout = null
-
 	const token = browseToken
 	if (!token) {
 		return
@@ -181,38 +177,11 @@ async function openConnection(token) {
 	}
 
 	browseSignaling = Signaling.createConnection(settings)
-	// Keep the secondary connection from interfering with the primary one:
-	// forward only the "supportedFeatures" event, which the chat needs to know
-	// that live chat-relay is available for the browsed conversation.
-	browseSignaling.setEventBusEmitAllowlist(['supportedFeatures'])
 
 	if (enableTypingIndicators) {
 		browseTypingHandler = new SignalingTypingHandler(store)
 		browseTypingHandler.setSignaling(browseSignaling)
 	}
-
-	// The browsed conversation is not joined the normal way, so the usual
-	// participant fetching (useGetParticipants) never runs for it. Load and keep
-	// its participant list fresh from the browse session's own room events, so
-	// participant-dependent UI works while browsing - notably the typing
-	// indicator, which matches typing signals against known participant sessions.
-	// Bound once to the connection and always acting on whichever conversation is
-	// browsed at the time the event arrives.
-	const refreshBrowseParticipants = () => {
-		const currentToken = browseToken
-		if (!currentToken) {
-			return
-		}
-		clearTimeout(participantsRefreshTimeout)
-		participantsRefreshTimeout = setTimeout(() => {
-			if (browseToken === currentToken) {
-				store.dispatch('fetchParticipants', { token: currentToken })
-			}
-		}, 500)
-	}
-	browseSignaling.on('usersInRoom', refreshBrowseParticipants)
-	browseSignaling.on('usersJoined', refreshBrowseParticipants)
-	browseSignaling.on('usersLeft', refreshBrowseParticipants)
 
 	return true
 }
@@ -236,12 +205,10 @@ async function joinBrowseRoom(token) {
 
 	browseToken = token
 
-	// joinRoom defers internally until the hello handshake completed.
+	// joinRoom defers internally until the hello handshake completed. From there
+	// on the connection's events - participants, chat relay, typing - reach the
+	// app carrying this conversation, and are handled like the primary one's.
 	browseSignaling.joinRoom(token, sessionId)
-
-	// Initial participant load (covers participants already present before we
-	// joined, in case no incoming room event follows).
-	store.dispatch('fetchParticipants', { token })
 
 	return true
 }

@@ -918,6 +918,12 @@ const actions = {
 		}
 
 		const handleParticipantsListReceived = (payload, key) => {
+			if (payload[1] !== token) {
+				// Users list of another conversation, e.g. one being browsed
+				// while this call is joined
+				return
+			}
+
 			const participant = payload[0].find((p) => p[key] === sessionId)
 			if (participant && participant.inCall !== PARTICIPANT.CALL_FLAG.DISCONNECTED) {
 				const flags = participant.inCall
