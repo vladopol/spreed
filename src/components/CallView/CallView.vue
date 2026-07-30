@@ -4,7 +4,7 @@
 -->
 
 <template>
-	<div id="call-container">
+	<div id="call-container" :class="{ 'call-container--overlay-only': isViewerOverlay }">
 		<ViewerOverlayCallView
 			v-if="isViewerOverlay"
 			:token="token"
@@ -866,6 +866,19 @@ export default {
 	--bottom-bar-height: calc(var(--default-clickable-area) + var(--wrapper-padding) * 2);
 	// For sidebar integrations: show container in a 16/9 proportion (+ top/bottom bar) based on the sidebar width
 	--sidebar-container-height: calc(56.25% + var(--top-bar-height) + var(--bottom-bar-height));
+}
+
+// In the overlay mode the call itself is teleported to the body and only the
+// positioning ghost is left behind, so the container must not take part in the
+// layout: next to a chat view it would otherwise show up as an empty block
+// taking half of the height. It still has to be positioned, as the ghost is
+// placed against it.
+#call-container.call-container--overlay-only {
+	position: absolute;
+	inset: 0;
+	height: auto;
+	background-color: transparent;
+	pointer-events: none;
 }
 
 #videos {
