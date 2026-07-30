@@ -762,6 +762,29 @@ describe('participantsStore', () => {
 			expect(appTokenStore.activeCallToken).toBe('')
 		})
 
+		test('leaves call after the own session id changed during the call', async () => {
+			// A session recovery (or the resync after a room switch) registers
+			// the call under a new session id, leaving the old entry behind.
+			store.commit('setInCall', {
+				token: TOKEN,
+				sessionId: 'session-id-recovered',
+				flags: PARTICIPANT.CALL_FLAG.IN_CALL,
+			})
+			expect(store.getters.isInCall(TOKEN)).toBe(true)
+
+			await store.dispatch('leaveCall', {
+				token: TOKEN,
+				participantIdentifier: {
+					attendeeId: 1,
+					sessionId: 'session-id-1',
+				},
+			})
+
+			// Leaving has to be final: a stale session left in place would keep
+			// the call view up with a hang up button that does nothing.
+			expect(store.getters.isInCall(TOKEN)).toBe(false)
+		})
+
 		test('records and forgets the conversation the call is in', async () => {
 			appTokenStore.activeCallToken = ''
 
