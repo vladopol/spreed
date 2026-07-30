@@ -128,6 +128,10 @@ export default {
 			// Token of the call kept alive in the background while browsing
 			// another conversation during a call, or null.
 			activeBrowseCallToken: null,
+			// Token the ongoing call is being moved to (breakout rooms, a
+			// one-to-one extended into a group), or null. Such a navigation is
+			// not browsing and must not be intercepted.
+			callMigrationToken: null,
 			debounceRefreshCurrentConversation: () => {},
 		}
 	},
@@ -366,7 +370,27 @@ export default {
 			// while the call view is shown again when navigating back to the
 			// call's conversation.
 			const activeCallToken = this.tokenStore.activeCallToken
-			if (activeCallToken && to.name === 'conversation' && from.params.token !== to.params.token) {
+
+			// The call itself is being moved to another conversation - a
+			// breakout room, or the group a one-to-one was extended into. This
+			// is not browsing: the target has to be joined normally, otherwise
+			// the call is never joined there and stays behind in a conversation
+			// nobody is looking at, with no controls to end it.
+			const isCallMigration = this.callMigrationToken !== null
+				&& to.params.token === this.callMigrationToken
+			// The conversation left behind is the browsed one, which the
+			// secondary session leaves on its own below. Leaving it again as the
+			// primary session would address a session the server does not have.
+			let skipLeavingPreviousConversation = false
+			if (isCallMigration) {
+				this.callMigrationToken = null
+				skipLeavingPreviousConversation = !!this.activeBrowseCallToken
+					&& from.params.token !== activeCallToken
+				this.activeBrowseCallToken = null
+				await destroyBrowseSignaling()
+			}
+
+			if (!isCallMigration && activeCallToken && to.name === 'conversation' && from.params.token !== to.params.token) {
 				if (to.params.token === activeCallToken) {
 					// Returning to the call: leave the browsed conversation, but
 					// keep the secondary connection for the next one. It is kept
@@ -389,7 +413,7 @@ export default {
 				return
 			}
 
-			if (from.name === 'conversation' && from.params.token !== to.params.token) {
+			if (!skipLeavingPreviousConversation && from.name === 'conversation' && from.params.token !== to.params.token) {
 				// Tear down the external call service view when leaving conversation,
 				// so iframe is not carried into the next one
 				if (hasExternalCallService(this.$store.getters.conversation(from.params.token))) {
@@ -589,6 +613,10 @@ export default {
 
 		async joinCallAutomatically(targetToken, prevToken = this.token) {
 			if (this.isInCall) {
+				// The call moves with the user: the navigation that follows has
+				// to join the target conversation for real, so that the call can
+				// be joined there.
+				this.callMigrationToken = targetToken
 				this.callViewStore.setForceCallView(true)
 
 				const enableAudio = !BrowserStorage.getItem('audioDisabled_' + prevToken)
