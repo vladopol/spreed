@@ -341,6 +341,23 @@ const mutations = {
 		state.initialised[token] = initialised
 	},
 
+	/**
+	 * Drop every in-call session of this client for the conversation.
+	 *
+	 * Only own sessions are tracked in `inCall`, so when the user leaves the
+	 * call none of them may stay behind. A session id that changed during the
+	 * call - a session recovery, or the resync that follows a room switch -
+	 * would otherwise be left in place and keep `isInCall` true forever: the
+	 * call view stays up with a hang up button that only re-sends a request the
+	 * server has already honoured, and only restarting the app clears it.
+	 *
+	 * @param {object} state current store state
+	 * @param {string} token conversation token
+	 */
+	clearInCall(state, token) {
+		delete state.inCall[token]
+	},
+
 	setInCall(state, { token, sessionId, flags }) {
 		if (flags === PARTICIPANT.CALL_FLAG.DISCONNECTED) {
 			if (state.inCall[token] && state.inCall[token][sessionId]) {
@@ -1039,11 +1056,10 @@ const actions = {
 		// clear raised hands as they were specific to the call
 		commit('clearParticipantHandRaised')
 
-		commit('setInCall', {
-			token,
-			sessionId: participantIdentifier?.sessionId,
-			flags: PARTICIPANT.CALL_FLAG.DISCONNECTED,
-		})
+		// Not only the session that is leaving: every own session of this
+		// conversation, so that leaving is final even if the session id changed
+		// while the call was running.
+		commit('clearInCall', token)
 	},
 
 	/**
