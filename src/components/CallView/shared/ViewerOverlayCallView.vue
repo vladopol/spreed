@@ -97,6 +97,20 @@
 								:model="localModel"
 								variant="secondary"
 								disableKeyboardShortcuts />
+							<!-- While another conversation is browsed, this overlay is
+								the only call UI on screen: without it the call could
+								not be ended without navigating back -->
+							<NcButton
+								v-if="isCallInAnotherConversation"
+								class="viewer-overlay__button"
+								variant="error"
+								:aria-label="t('spreed', 'Leave call')"
+								:title="t('spreed', 'Leave call')"
+								@click.stop="leaveCall">
+								<template #icon>
+									<IconPhoneHangup :size="20" />
+								</template>
+							</NcButton>
 						</div>
 					</div>
 				</TransitionWrapper>
@@ -111,6 +125,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import ArrowExpand from 'vue-material-design-icons/ArrowExpand.vue'
 import ChevronDown from 'vue-material-design-icons/ChevronDown.vue'
 import ChevronUp from 'vue-material-design-icons/ChevronUp.vue'
+import IconPhoneHangup from 'vue-material-design-icons/PhoneHangup.vue'
 import TransitionWrapper from '../../UIShared/TransitionWrapper.vue'
 import EmptyCallView from './EmptyCallView.vue'
 import LocalAudioControlButton from './LocalAudioControlButton.vue'
@@ -118,6 +133,7 @@ import LocalVideo from './LocalVideo.vue'
 import LocalVideoControlButton from './LocalVideoControlButton.vue'
 import ScreenShare from './ScreenShare.vue'
 import VideoVue from './VideoVue.vue'
+import { useActorStore } from '../../../stores/actor.ts'
 import { useCallViewStore } from '../../../stores/callView.ts'
 import { useTokenStore } from '../../../stores/token.ts'
 import { localCallParticipantModel, localMediaModel } from '../../../utils/webrtc/index.js'
@@ -133,6 +149,7 @@ export default {
 		LocalVideo,
 		ChevronUp,
 		ChevronDown,
+		IconPhoneHangup,
 		NcButton,
 		TransitionWrapper,
 		VideoVue,
@@ -185,6 +202,7 @@ export default {
 
 	setup() {
 		return {
+			actorStore: useActorStore(),
 			callViewStore: useCallViewStore(),
 			tokenStore: useTokenStore(),
 		}
@@ -221,6 +239,16 @@ export default {
 				bottom: this.position.bottom + 'px',
 			}
 		},
+
+		/**
+		 * The call is overlaid on a different conversation than its own, so no
+		 * other call controls are on screen.
+		 *
+		 * @return {boolean}
+		 */
+		isCallInAnotherConversation() {
+			return this.token !== this.tokenStore.token
+		},
 	},
 
 	mounted() {
@@ -241,11 +269,19 @@ export default {
 			}
 			this.callViewStore.setIsViewerOverlay(false)
 
-			if (this.token !== this.tokenStore.token) {
+			if (this.isCallInAnotherConversation) {
 				// The call is overlaid on another conversation being browsed;
 				// going back to it is what maximising means here.
 				this.$router.push({ name: 'conversation', params: { token: this.token } })
 			}
+		},
+
+		async leaveCall() {
+			this.callViewStore.setSelectedVideoPeerId(null)
+			await this.$store.dispatch('leaveCall', {
+				token: this.token,
+				participantIdentifier: this.actorStore.participantIdentifier,
+			})
 		},
 
 		updatePosition() {
