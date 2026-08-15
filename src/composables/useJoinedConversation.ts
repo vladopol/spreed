@@ -9,6 +9,7 @@ import { createSharedComposable } from '@vueuse/core'
 import { onBeforeMount, onBeforeUnmount, readonly, ref, toValue, watch } from 'vue'
 import { EventBus } from '../services/EventBus.ts'
 import SessionStorage from '../services/SessionStorage.js'
+import { logIssue1777 } from '../utils/issue1777Debug.ts'
 
 const joinedConversationToken = ref<string | null>(null)
 
@@ -16,7 +17,9 @@ const joinedConversationToken = ref<string | null>(null)
  * Update ref from SessionStorage
  */
 function readJoinedConversation() {
+	const previous = joinedConversationToken.value
 	joinedConversationToken.value = SessionStorage.getItem('joined_conversation')
+	logIssue1777('readJoinedConversation', { previous, next: joinedConversationToken.value })
 }
 
 /**
@@ -26,6 +29,7 @@ function useJoinedConversationComposable() {
 	onBeforeMount(() => {
 		EventBus.on('joined-conversation', readJoinedConversation)
 		readJoinedConversation()
+		logIssue1777('useJoinedConversation mounted', { sessionStorageValueOnMount: SessionStorage.getItem('joined_conversation') })
 	})
 
 	onBeforeUnmount(() => {
@@ -51,12 +55,22 @@ export function watchJoinedConversation(
 ): WatchStopHandle {
 	const currentJoinedConversation = useJoinedConversation()
 
+	logIssue1777('watchJoinedConversation registered', {
+		targetToken: toValue(token),
+		currentValueAtSetup: currentJoinedConversation.value,
+		immediate: options?.immediate,
+		willFireImmediatelyDueToStaleMatch: Boolean(options?.immediate) && currentJoinedConversation.value === toValue(token),
+	}, true)
+
 	return watch(currentJoinedConversation, (newToken, oldToken, onCleanup) => {
 		const targetToken = toValue(token)
+		const matched = Boolean(targetToken) && newToken === targetToken
+		logIssue1777('watchJoinedConversation fired', { newToken, oldToken, targetToken, matched })
 		if (!targetToken || newToken !== targetToken) {
 			return
 		}
 
+		logIssue1777('watchJoinedConversation MATCHED, invoking callback (triggers joinCall)', { newToken, targetToken }, true)
 		callback(newToken, oldToken, onCleanup)
 	}, options)
 }

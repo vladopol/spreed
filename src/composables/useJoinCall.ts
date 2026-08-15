@@ -16,6 +16,7 @@ import { useActorStore } from '../stores/actor.ts'
 import { useSettingsStore } from '../stores/settings.ts'
 import { isAxiosErrorResponse } from '../types/guards.ts'
 import { isConversationPhoneRoom } from '../utils/conversation.ts'
+import { logIssue1777 } from '../utils/issue1777Debug.ts'
 
 /**
  * Handler function to join a call and manage side effects
@@ -62,6 +63,11 @@ export function useJoinCall() {
 		shouldStartRecording = false,
 		directCall = false,
 	} = {}) {
+		// Presence of this entry separates the UI paths (handleDirectCall,
+		// CallButton, joinCallAutomatically) from a rejoin issued by signaling.js,
+		// which never passes through here.
+		logIssue1777('useJoinCall.joinCall entered', { token, silent, directCall, recordingConsent, shouldStartRecording }, true)
+
 		const conversation = vuexStore.getters.conversation(token)
 		if (!actorStore.participantIdentifier.sessionId || conversation.attendeeId !== actorStore.participantIdentifier.attendeeId) {
 			console.error('Trying to join call without having joined the conversation')

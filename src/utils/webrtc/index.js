@@ -14,6 +14,7 @@ import { useTokenStore } from '../../stores/token.ts'
 import { isIOS, isSafari } from '../browserCheck.ts'
 import CancelableRequest from '../CancelableRequest.ts'
 import Encryption from '../e2ee/encryption.js'
+import { logIssue1777 } from '../issue1777Debug.ts'
 import Signaling from '../signaling.js'
 import SignalingTypingHandler from '../SignalingTypingHandler.js'
 import CallAnalyzer from './analyzers/CallAnalyzer.js'
@@ -213,6 +214,7 @@ function startCall(signaling, configuration, silent, recordingConsent, silentFor
 		}
 	}
 
+	logIssue1777('webrtc.startCall using pendingJoinCallToken', { pendingJoinCallToken, flags, silent }, true)
 	signaling.joinCall(pendingJoinCallToken, flags, silent, recordingConsent, silentFor).then(() => {
 		startedCall(flags)
 	}).catch((error) => {
@@ -284,6 +286,7 @@ async function signalingJoinConversation(token, sessionId) {
  */
 async function signalingJoinCall(token, flags, silent, recordingConsent, silentFor, options = {}) {
 	if (tokensInSignaling[token]) {
+		logIssue1777('webrtc.signalingJoinCall setting pendingJoinCallToken', { token, previous: pendingJoinCallToken })
 		pendingJoinCallToken = token
 
 		// A new call is being joined, so the call view mounted for it has to
@@ -477,6 +480,7 @@ async function signalingJoinCallForRecording(token, settings, internalClientAuth
 	// client.
 	await signaling.joinRoom(token)
 
+	logIssue1777('webrtc.internal setting pendingJoinCallToken', { token, previous: pendingJoinCallToken })
 	pendingJoinCallToken = token
 
 	setupWebRtc()

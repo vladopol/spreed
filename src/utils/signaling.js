@@ -24,6 +24,7 @@ import pinia from '../stores/pinia.ts'
 import CancelableRequest from './CancelableRequest.ts'
 import Encryption from './e2ee/encryption.js'
 import { convertToUnix } from './formattedTime.ts'
+import { logIssue1777, setIssue1777Context } from './issue1777Debug.ts'
 import { messagePleaseTryToReload } from './talkDesktopUtils.ts'
 
 const actorStore = useActorStore(pinia)
@@ -152,6 +153,7 @@ Signaling.Base.prototype.getCurrentCallFlags = function() {
 }
 
 Signaling.Base.prototype._resetCurrentCallParameters = function() {
+	logIssue1777('signaling._resetCurrentCallParameters', { previousCurrentCallToken: this.currentCallToken }, true)
 	this.currentCallToken = null
 	this.currentCallFlags = null
 	this.currentCallSilent = null
@@ -237,8 +239,11 @@ Signaling.Base.prototype.joinRoom = function(token, sessionId) {
 		this.nextcloudSessionId = sessionId
 		this._trigger('joinRoom', [token])
 		resolve()
-		if (this.currentCallToken === token) {
+		const staleCallTokenMatch = this.currentCallToken === token
+		logIssue1777('signaling.joinRoom', { token, currentCallToken: this.currentCallToken, staleCallTokenMatch }, staleCallTokenMatch)
+		if (staleCallTokenMatch) {
 			// We were in this call before, join again.
+			logIssue1777('signaling.joinRoom AUTO-REJOINING CALL due to stale currentCallToken match', { token }, true)
 			this.joinCall(token, this.currentCallFlags, this.currentCallSilent, this.currentCallRecordingConsent, this.currentCallSilentFor)
 		} else {
 			this._resetCurrentCallParameters()
@@ -292,6 +297,7 @@ Signaling.Base.prototype.joinCall = function(token, flags, silent, recordingCons
 			silentFor,
 		})
 			.then(function() {
+				logIssue1777('signaling.joinCall success, setting currentCallToken', { token }, true)
 				this.currentCallToken = token
 				this.currentCallFlags = flags
 				this.currentCallSilent = silent
@@ -341,6 +347,7 @@ Signaling.Base.prototype.leaveCall = function(token, keepToken, all = false) {
 			return
 		}
 
+		logIssue1777('signaling.leaveCall called', { token, keepToken, all, currentCallToken: this.currentCallToken }, true)
 		this._trigger('beforeLeaveCall', [token, keepToken])
 
 		axios.delete(generateOcsUrl('apps/spreed/api/v4/call/{token}', { token }), {
@@ -355,6 +362,8 @@ Signaling.Base.prototype.leaveCall = function(token, keepToken, all = false) {
 				// We left the current call.
 				if (!keepToken && token === this.currentCallToken) {
 					this._resetCurrentCallParameters()
+				} else {
+					logIssue1777('signaling.leaveCall success but currentCallToken NOT reset', { token, keepToken, currentCallToken: this.currentCallToken })
 				}
 			}.bind(this))
 			.catch(function() {
@@ -1119,6 +1128,7 @@ Signaling.Standalone.prototype.helloResponseReceived = function(data) {
 		return
 	}
 	this.sessionId = data.hello.sessionid
+	setIssue1777Context({ signalingSessionId: this.sessionId })
 	this._trigger('sessionId', [this.sessionId])
 	this.resumeId = data.hello.resumeid
 	this.features = {}
@@ -1254,6 +1264,13 @@ Signaling.Standalone.prototype.joinCall = function(token, flags, silent, recordi
 			this.pendingJoinCall.reject(new Error('Pending join call canceled for ' + this.pendingJoinCall.token))
 		}
 
+		logIssue1777('signaling.joinCall DEFERRED, creating pendingJoinCall', {
+			token,
+			flags,
+			silent,
+			signalingRoomJoined: this.signalingRoomJoined,
+		}, true)
+
 		const promise = new Promise((resolve, reject) => {
 			this.pendingJoinCall = {
 				token,
@@ -1307,6 +1324,11 @@ Signaling.Standalone.prototype.joinResponseReceived = function(data, token) {
 		const pendingJoinCallReject = this.pendingJoinCall.reject
 
 		const { flags, silent, recordingConsent, silentFor } = this.pendingJoinCall
+		logIssue1777('signaling.joinResponseReceived CONSUMING pendingJoinCall (triggers POST /call)', {
+			token,
+			flags,
+			silent,
+		}, true)
 		this.joinCall(token, flags, silent, recordingConsent, silentFor)
 			.then(() => {
 				pendingJoinCallResolve()

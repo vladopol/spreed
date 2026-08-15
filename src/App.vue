@@ -65,6 +65,7 @@ import { useSidebarStore } from './stores/sidebar.ts'
 import { useTokenStore } from './stores/token.ts'
 import { checkBrowser } from './utils/browserCheck.ts'
 import { hasExternalCallService } from './utils/conversation.ts'
+import { instrumentRouterForIssue1777, logIssue1777 } from './utils/issue1777Debug.ts'
 import { destroyBrowseSignaling, mountBrowseSignaling, unmountBrowseSignaling } from './utils/webrtc/browseSignaling.js'
 import { signalingKill } from './utils/webrtc/index.js'
 
@@ -328,6 +329,7 @@ export default {
 		})
 
 		EventBus.on('switch-to-conversation', async (params) => {
+			logIssue1777('App switch-to-conversation event received', { token: params.token, currentToken: this.token })
 			await this.joinCallAutomatically(params.token)
 
 			this.skipLeaveWarning = true
@@ -441,6 +443,8 @@ export default {
 
 			next()
 		}
+
+		instrumentRouterForIssue1777(this.$router)
 
 		this.$router.afterEach((to, from) => {
 			/**
@@ -612,6 +616,7 @@ export default {
 		},
 
 		async joinCallAutomatically(targetToken, prevToken = this.token) {
+			logIssue1777('App.joinCallAutomatically entered', { targetToken, prevToken, isInCall: this.isInCall }, true)
 			if (this.isInCall) {
 				// The call moves with the user: the navigation that follows has
 				// to join the target conversation for real, so that the call can

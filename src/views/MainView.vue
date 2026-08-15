@@ -26,6 +26,7 @@ import { useCallViewStore } from '../stores/callView.ts'
 import { useSettingsStore } from '../stores/settings.ts'
 import { useTokenStore } from '../stores/token.ts'
 import { hasExternalCallService, isConversationPhoneRoom } from '../utils/conversation.ts'
+import { logIssue1777 } from '../utils/issue1777Debug.ts'
 
 const props = defineProps<{
 	token: string
@@ -75,6 +76,7 @@ watch([() => props.token, isVoiceRoom], ([newToken, newIsVoiceRoom]) => {
 	if (watchedJoinedConversationToken && watchedJoinedConversationToken !== newToken) {
 		stopWatchingJoinedConversation()
 	}
+	logIssue1777('MainView token/isVoiceRoom watch fired', { newToken, newIsVoiceRoom, willCallHandleDirectCall: Boolean(newIsVoiceRoom && newToken) })
 	if (newIsVoiceRoom && newToken) {
 		handleDirectCall(newToken)
 	}
@@ -93,8 +95,13 @@ watch(isInLobby, (isInLobby) => {
 onMounted(() => {
 	watchEffect(() => {
 		if (route.hash === '#direct-call') {
+			logIssue1777('MainView #direct-call hash detected', { token: route.params.token })
 			handleDirectCall(route.params.token as string)
+			// If this replace is swallowed, the hash stays in the history entry and
+			// fires again on the next return to the room - the leading hypothesis.
 			router.replace({ hash: '' })
+				.then(() => logIssue1777('MainView hash cleared by router.replace', { token: route.params.token }))
+				.catch((error) => logIssue1777('MainView router.replace FAILED, hash may persist in history', { token: route.params.token, error: String(error) }, true))
 		} else if (route.hash === '#settings') {
 			emit('show-conversation-settings', { token: props.token })
 			router.replace({ hash: '' })
@@ -112,6 +119,7 @@ onUnmounted(() => {
  * @param routeToken token of conversation to join
  */
 function handleDirectCall(routeToken: string) {
+	logIssue1777('MainView.handleDirectCall entered', { routeToken, isVoiceRoom: isVoiceRoom.value, routeHash: route.hash }, true)
 	stopWatchingJoinedConversation()
 
 	const conversation = store.getters.conversation(routeToken)
