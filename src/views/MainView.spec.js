@@ -28,8 +28,9 @@ describe('MainView.vue', () => {
 		setActivePinia(createPinia())
 
 		store = createStore({
+			state: { isInLobby: false },
 			getters: {
-				isInLobby: () => false,
+				isInLobby: (state) => state.isInLobby,
 				connectionFailed: () => () => false,
 				conversation: () => () => ({ token: TOKEN, type: 2 }),
 				isInCall: () => () => false,
@@ -44,6 +45,7 @@ describe('MainView.vue', () => {
 		callViewStore.setForceCallView(false)
 		tokenStore.token = TOKEN
 		tokenStore.activeCallToken = ''
+		store.state.isInLobby = false
 	})
 
 	/**
@@ -61,6 +63,18 @@ describe('MainView.vue', () => {
 	describe('call in another conversation', () => {
 		it('keeps the ongoing call on screen while another conversation is browsed', async () => {
 			tokenStore.activeCallToken = CALL_TOKEN
+
+			const wrapper = mountMainView(TOKEN)
+			await nextTick()
+
+			const callView = wrapper.findComponent(CallView)
+			expect(callView.exists()).toBe(true)
+			expect(callView.props('token')).toBe(CALL_TOKEN)
+		})
+
+		it('keeps it on screen in a conversation whose lobby blocks the chat', async () => {
+			tokenStore.activeCallToken = CALL_TOKEN
+			store.state.isInLobby = true
 
 			const wrapper = mountMainView(TOKEN)
 			await nextTick()

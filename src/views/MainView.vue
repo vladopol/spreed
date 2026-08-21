@@ -151,15 +151,16 @@ function handleDirectCall(routeToken: string) {
 			<TopBar v-if="!isInExternalCall" :isInCall="isInCall" />
 			<ExternalCallView v-if="isInExternalCall" :token="token" />
 			<CallView v-else-if="isInCall" :token="token" />
-			<template v-else>
-				<ChatView />
-				<!-- The call runs in another conversation: keep it on screen,
-					as the overlay the viewer uses for the same situation -->
-				<CallView v-if="callInAnotherConversation" :token="tokenStore.activeCallToken" />
-			</template>
+			<ChatView v-else />
 			<PollViewer />
 			<CallFailedDialog v-if="connectionFailed" :token="token" />
 		</template>
+
+		<!-- The call runs in another conversation: keep it on screen, as the
+			overlay the viewer uses for the same situation. Outside of the lobby
+			branch, as the call has to stay reachable whatever the browsed
+			conversation shows -->
+		<CallView v-if="callInAnotherConversation" :token="tokenStore.activeCallToken" />
 	</div>
 </template>
 
