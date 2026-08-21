@@ -9,7 +9,10 @@
 			<!-- Add .app-talk to use Talk icon classes outside of #content-vue -->
 			<div
 				class="viewer-overlay app-talk"
-				:class="{ 'viewer-overlay--above-chat-input': isAboveChatInput }"
+				:class="{
+					'viewer-overlay--above-chat-input': isAboveChatInput,
+					'viewer-overlay--below-dialogs': isBelowDialogs,
+				}"
 				:style="computedStyle">
 				<div
 					class="viewer-overlay__collapse"
@@ -134,6 +137,7 @@ import LocalVideo from './LocalVideo.vue'
 import LocalVideoControlButton from './LocalVideoControlButton.vue'
 import ScreenShare from './ScreenShare.vue'
 import VideoVue from './VideoVue.vue'
+import { useViewer } from '../../../composables/useViewer.js'
 import { useActorStore } from '../../../stores/actor.ts'
 import { useCallViewStore } from '../../../stores/callView.ts'
 import { useTokenStore } from '../../../stores/token.ts'
@@ -202,7 +206,10 @@ export default {
 	},
 
 	setup() {
+		const { isViewerOpen } = useViewer('talk')
+
 		return {
+			isViewerOpen,
 			actorStore: useActorStore(),
 			callViewStore: useCallViewStore(),
 			tokenStore: useTokenStore(),
@@ -254,6 +261,19 @@ export default {
 		 */
 		isCallInAnotherConversation() {
 			return this.token !== this.tokenStore.token
+		},
+
+		/**
+		 * The overlay has to sit on top of the viewer, which is what it was
+		 * made for, but nothing else is layered over a browsed conversation
+		 * that the call should cover: a dialog opened there (conversation
+		 * settings, an upload editor, a poll) takes over the screen, and the
+		 * overlay must go behind it rather than on top of it.
+		 *
+		 * @return {boolean}
+		 */
+		isBelowDialogs() {
+			return this.isCallInAnotherConversation && !this.isViewerOpen
 		},
 	},
 
@@ -378,6 +398,11 @@ export default {
 // anchored on top of the message input and would otherwise be covered.
 .viewer-overlay--above-chat-input {
 	margin-bottom: calc(var(--default-clickable-area) + 8px);
+}
+
+// Above the app, below the dialog layer (the modal mask is at 9998)
+.viewer-overlay--below-dialogs {
+	z-index: 9997;
 }
 
 .viewer-overlay * {
