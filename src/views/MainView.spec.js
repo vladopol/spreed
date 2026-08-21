@@ -70,15 +70,6 @@ describe('MainView.vue', () => {
 			expect(callView.props('token')).toBe(CALL_TOKEN)
 		})
 
-		it('shows that call as the compact overlay only', async () => {
-			tokenStore.activeCallToken = CALL_TOKEN
-
-			mountMainView(TOKEN)
-			await nextTick()
-
-			expect(callViewStore.isViewerOverlay).toBe(true)
-		})
-
 		it('does not add a second call view when the call is in the viewed conversation', async () => {
 			tokenStore.activeCallToken = TOKEN
 
@@ -86,7 +77,6 @@ describe('MainView.vue', () => {
 			await nextTick()
 
 			expect(wrapper.findComponent(CallView).exists()).toBe(false)
-			expect(callViewStore.isViewerOverlay).toBe(false)
 		})
 
 		it('does not show a call view when there is no call at all', async () => {
@@ -94,7 +84,6 @@ describe('MainView.vue', () => {
 			await nextTick()
 
 			expect(wrapper.findComponent(CallView).exists()).toBe(false)
-			expect(callViewStore.isViewerOverlay).toBe(false)
 		})
 
 		it('removes the overlay once the call ends', async () => {
@@ -102,13 +91,12 @@ describe('MainView.vue', () => {
 
 			const wrapper = mountMainView(TOKEN)
 			await nextTick()
-			expect(callViewStore.isViewerOverlay).toBe(true)
+			expect(wrapper.findComponent(CallView).exists()).toBe(true)
 
 			// The call ends, possibly remotely
 			tokenStore.activeCallToken = ''
 			await nextTick()
 
-			expect(callViewStore.isViewerOverlay).toBe(false)
 			expect(wrapper.findComponent(CallView).exists()).toBe(false)
 		})
 
@@ -124,7 +112,6 @@ describe('MainView.vue', () => {
 			await nextTick()
 
 			expect(wrapper.findComponent(CallView).props('token')).toBe(OTHER_CALL_TOKEN)
-			expect(callViewStore.isViewerOverlay).toBe(true)
 		})
 	})
 })

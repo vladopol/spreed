@@ -193,6 +193,7 @@ import { EventBus } from '../../services/EventBus.ts'
 import { useCallViewStore } from '../../stores/callView.ts'
 import { useParticipantActivityStore } from '../../stores/participantActivity.ts'
 import { useSettingsStore } from '../../stores/settings.ts'
+import { useTokenStore } from '../../stores/token.ts'
 import { callParticipantCollection, consumeStartWithoutMediaPending, localCallParticipantModel, localMediaModel } from '../../utils/webrtc/index.js'
 import RemoteVideoBlocker from '../../utils/webrtc/RemoteVideoBlocker.js'
 import { placeholderImage, placeholderModel, placeholderName, placeholderSharedData } from './Grid/gridPlaceholders.ts'
@@ -288,6 +289,7 @@ export default {
 			participantActivityStore,
 			isMultiSpeaker,
 			promotedSessionIds,
+			tokenStore: useTokenStore(),
 		}
 	},
 
@@ -426,7 +428,13 @@ export default {
 		},
 
 		isViewerOverlay() {
-			return this.callViewStore.isViewerOverlay
+			// A call view of a conversation other than the viewed one is a call
+			// browsing another conversation, and that is only ever shown as the
+			// compact overlay. The store flag alone would not do: it is also
+			// cleared when the viewer is closed, which can happen in the
+			// browsed conversation, and the call view would then be expanded
+			// on top of the chat.
+			return this.callViewStore.isViewerOverlay || this.token !== this.tokenStore.token
 		},
 
 		isGrid() {
