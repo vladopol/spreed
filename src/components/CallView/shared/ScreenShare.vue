@@ -14,8 +14,13 @@
 			:disablePictureInPicture="!isBig ? 'true' : 'false'"
 			class="screen"
 			:class="screenClass" />
+		<!-- Only over the big screen: the placeholder is a full-size empty
+			content with a description and two buttons, which does not fit in a
+			small preview - as the one of the call overlay shown while another
+			conversation is browsed during a call - and would overlap its
+			controls -->
 		<NcEmptyContent
-			v-if="isLocalScreen && showScreenPlaceholder"
+			v-if="isBig && isLocalScreen && showScreenPlaceholder"
 			class="screen-placeholder"
 			:name="t('spreed', 'You are sharing a screen')"
 			:description="t('spreed', 'Sharing this window may cause a mirroring effect')"
