@@ -10,6 +10,7 @@ import { reactive } from 'vue'
 import { createStore } from 'vuex'
 import CallView from './CallView.vue'
 import ScreenShare from './shared/ScreenShare.vue'
+import ViewerOverlayCallView from './shared/ViewerOverlayCallView.vue'
 import { useCallViewStore } from '../../stores/callView.ts'
 import { useTokenStore } from '../../stores/token.ts'
 import { callParticipantCollection, localCallParticipantModel, localMediaModel } from '../../utils/webrtc/index.js'
@@ -310,6 +311,41 @@ describe('CallView.vue', () => {
 			await wrapper.find('div#call-container').trigger('mouseleave')
 
 			expect(wrapper.findComponent({ name: 'VideosGrid' }).props('showVideoOverlay')).toBe(false)
+		})
+	})
+
+	// The call view of a conversation that is not the viewed one belongs to a
+	// call whose conversation is not on screen, which is only ever shown as the
+	// compact overlay
+	describe('overlay while another conversation is browsed', () => {
+		const BROWSED_TOKEN = 'XXBROWSEDXX'
+
+		it('shows the call as the overlay when another conversation is viewed', () => {
+			tokenStore.token = BROWSED_TOKEN
+
+			const wrapper = mountCallView()
+
+			expect(wrapper.vm.isViewerOverlay).toBe(true)
+			expect(wrapper.findComponent(ViewerOverlayCallView).exists()).toBe(true)
+		})
+
+		it('keeps it as the overlay when the viewer clears the flag', async () => {
+			tokenStore.token = BROWSED_TOKEN
+
+			const wrapper = mountCallView()
+			// Closing the viewer in the browsed conversation clears the flag
+			callViewStore.setIsViewerOverlay(false)
+			await wrapper.vm.$nextTick()
+
+			expect(wrapper.vm.isViewerOverlay).toBe(true)
+			expect(wrapper.findComponent(ViewerOverlayCallView).exists()).toBe(true)
+		})
+
+		it('shows the full call view in the conversation of the call', () => {
+			const wrapper = mountCallView()
+
+			expect(wrapper.vm.isViewerOverlay).toBe(false)
+			expect(wrapper.findComponent(ViewerOverlayCallView).exists()).toBe(false)
 		})
 	})
 })
