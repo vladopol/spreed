@@ -3,10 +3,16 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, shallowMount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, test, vi } from 'vitest'
+import { reactive } from 'vue'
+import { createStore } from 'vuex'
 import CallView from './CallView.vue'
+import ScreenShare from './shared/ScreenShare.vue'
+import { useCallViewStore } from '../../stores/callView.ts'
+import { useTokenStore } from '../../stores/token.ts'
+import { callParticipantCollection, localCallParticipantModel, localMediaModel } from '../../utils/webrtc/index.js'
 
 vi.mock('@nextcloud/event-bus', () => ({
 	EventBus: {
@@ -18,46 +24,195 @@ vi.mock('@nextcloud/event-bus', () => ({
 	unsubscribe: vi.fn(),
 }))
 
+// The tile animation reads the motion preference through matchMedia, which
+// jsdom does not have
+vi.mock('./Grid/tilePromotionTransition.ts', () => ({
+	TILE_SESSION_ATTRIBUTE: 'data-tile-session-id',
+	animateTilePromotion: vi.fn(),
+}))
+
 vi.mock('../../utils/webrtc/index.js', () => ({
 	callParticipantCollection: {
-		callParticipantModels: [],
+		callParticipantModels: reactive([]),
 		on: vi.fn(),
 		off: vi.fn(),
 	},
 	localCallParticipantModel: {
-		attributes: {
-			peerId: 'local-peer',
-		},
+		attributes: reactive({ peerId: 'local-peer-id' }),
 	},
 	localMediaModel: {
-		attributes: {
+		attributes: reactive({
 			localScreen: null,
 			videoEnabled: false,
-		},
+			audioEnabled: false,
+		}),
 		disableAudio: vi.fn(),
 		disableVideo: vi.fn(),
 	},
+	consumeStartWithoutMediaPending: vi.fn(() => false),
 }))
 
 describe('CallView.vue', () => {
 	const TOKEN = 'XXTOKENXX'
-	let wrapper
+
+	let store
+	let tokenStore
+	let callViewStore
+
+	beforeAll(() => {
+		// A single pinia for the whole file: the call views mounted by the
+		// tests keep running and would otherwise write to a stale one
+		setActivePinia(createPinia())
+
+		tokenStore = useTokenStore()
+		callViewStore = useCallViewStore()
+
+		store = createStore({
+			getters: {
+				conversation: () => () => ({ token: TOKEN }),
+			},
+		})
+	})
 
 	beforeEach(() => {
-		setActivePinia(createPinia())
+		callViewStore.$reset()
+		// The call view of the viewed conversation, as opposed to the overlay
+		// shown while another conversation is browsed
+		tokenStore.token = TOKEN
+
+		callParticipantCollection.callParticipantModels.splice(0)
+		localMediaModel.attributes.localScreen = null
 	})
+
+	/**
+	 * A minimal stand-in for a CallParticipantModel.
+	 *
+	 * @param {string} peerId peer id of the participant
+	 * @param {object} attributes attributes to set besides the peer id
+	 */
+	function addCallParticipantModel(peerId, attributes = {}) {
+		const model = {
+			attributes: reactive({
+				peerId,
+				name: peerId,
+				screen: null,
+				videoAvailable: false,
+				audioAvailable: false,
+				internal: false,
+				...attributes,
+			}),
+			setVideoBlocked: vi.fn(),
+			setSimulcastVideoQuality: vi.fn(),
+		}
+
+		callParticipantCollection.callParticipantModels.push(model)
+
+		return model
+	}
+
+	/**
+	 * @param {string} token conversation the call is in
+	 */
+	function mountCallView(token = TOKEN) {
+		return shallowMount(CallView, {
+			props: { token },
+			global: {
+				plugins: [store],
+			},
+		})
+	}
+
+	// The call view is created again during an ongoing call when coming back to
+	// it after browsing another conversation, so whatever is shared at that
+	// point was shared before the call view existed.
+	describe('screens shared before the call view is created', () => {
+		it('shows a remote screen shared before the call view was created', () => {
+			addCallParticipantModel('peer-id', { screen: {} })
+
+			const wrapper = mountCallView()
+
+			expect(wrapper.vm.screens).toEqual(['peer-id'])
+			expect(wrapper.vm.showRemoteScreen).toBe(true)
+			expect(wrapper.findComponent(ScreenShare).exists()).toBe(true)
+		})
+
+		it('shows a local screen shared before the call view was created', () => {
+			localMediaModel.attributes.localScreen = {}
+
+			const wrapper = mountCallView()
+
+			expect(wrapper.vm.screens).toEqual([localCallParticipantModel.attributes.peerId])
+			expect(wrapper.vm.showLocalScreen).toBe(true)
+		})
+
+		it('marks the shown screen as visible', () => {
+			addCallParticipantModel('peer-id', { screen: {} })
+
+			const wrapper = mountCallView()
+
+			expect(wrapper.vm.sharedDatas['peer-id'].screenVisible).toBe(true)
+			expect(wrapper.vm.localSharedData.screenVisible).toBe(false)
+		})
+
+		it('does not report a screen when none is shared', () => {
+			addCallParticipantModel('peer-id')
+
+			const wrapper = mountCallView()
+
+			expect(wrapper.vm.screens).toEqual([])
+			expect(wrapper.vm.showRemoteScreen).toBe(false)
+		})
+	})
+
+	describe('screens shared while the call view exists', () => {
+		it('shows a screen started after the call view was created', async () => {
+			const model = addCallParticipantModel('peer-id')
+			const wrapper = mountCallView()
+
+			model.attributes.screen = {}
+			await wrapper.vm.$nextTick()
+
+			expect(wrapper.vm.screens).toEqual(['peer-id'])
+		})
+
+		it('lists a screen only once when its stream is replaced', async () => {
+			const model = addCallParticipantModel('peer-id', { screen: {} })
+			const wrapper = mountCallView()
+
+			model.attributes.screen = {}
+			await wrapper.vm.$nextTick()
+
+			expect(wrapper.vm.screens).toEqual(['peer-id'])
+		})
+
+		it('removes the screen when the sharing stops', async () => {
+			const model = addCallParticipantModel('peer-id', { screen: {} })
+			const wrapper = mountCallView()
+
+			model.attributes.screen = null
+			await wrapper.vm.$nextTick()
+
+			expect(wrapper.vm.screens).toEqual([])
+		})
+	})
+
+	// Upstream's tests of the overlay activity tracking mount the whole call
+	// view with its children stubbed out
+	let wrapper
 
 	afterEach(() => {
 		wrapper?.unmount()
+		wrapper = undefined
 	})
 
-	const mountCallView = (props = {}) => {
+	const mountCallViewWithStubs = (props = {}) => {
 		return mount(CallView, {
 			props: {
 				token: TOKEN,
 				...props,
 			},
 			global: {
+				plugins: [store],
 				stubs: {
 					ViewerOverlayCallView: true,
 					EmptyCallView: true,
@@ -85,7 +240,7 @@ describe('CallView.vue', () => {
 		})
 
 		test('showVideoOverlay becomes false after 5000ms of inactivity', async () => {
-			wrapper = mountCallView()
+			wrapper = mountCallViewWithStubs()
 
 			expect(wrapper.findComponent({ name: 'VideosGrid' }).props('showVideoOverlay')).toBe(true)
 
@@ -99,7 +254,7 @@ describe('CallView.vue', () => {
 		})
 
 		test('handleMovement resets the timer', async () => {
-			wrapper = mountCallView()
+			wrapper = mountCallViewWithStubs()
 
 			// Start the initial timer
 			expect(wrapper.findComponent({ name: 'VideosGrid' }).props('showVideoOverlay')).toBe(true)
@@ -130,7 +285,7 @@ describe('CallView.vue', () => {
 		})
 
 		test('handleMovement sets showVideoOverlay to true', async () => {
-			wrapper = mountCallView()
+			wrapper = mountCallViewWithStubs()
 
 			// Start the timer
 			await wrapper.find('div#call-container').trigger('mousemove')
@@ -148,7 +303,7 @@ describe('CallView.vue', () => {
 		})
 
 		test('hideOverlay immediately sets showVideoOverlay to false', async () => {
-			wrapper = mountCallView()
+			wrapper = mountCallViewWithStubs()
 
 			expect(wrapper.findComponent({ name: 'VideosGrid' }).props('showVideoOverlay')).toBe(true)
 
