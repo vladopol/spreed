@@ -1,0 +1,181 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+import { shallowMount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { reactive } from 'vue'
+import { createStore } from 'vuex'
+import CallView from './CallView.vue'
+import ScreenShare from './shared/ScreenShare.vue'
+import { useCallViewStore } from '../../stores/callView.ts'
+import { useTokenStore } from '../../stores/token.ts'
+import { callParticipantCollection, localCallParticipantModel, localMediaModel } from '../../utils/webrtc/index.js'
+
+vi.mock('../../utils/webrtc/index.js', () => ({
+	callParticipantCollection: {
+		callParticipantModels: reactive([]),
+		on: vi.fn(),
+		off: vi.fn(),
+	},
+	localCallParticipantModel: {
+		attributes: reactive({ peerId: 'local-peer-id' }),
+	},
+	localMediaModel: {
+		attributes: reactive({
+			localScreen: null,
+			videoEnabled: false,
+			audioEnabled: false,
+		}),
+		disableAudio: vi.fn(),
+		disableVideo: vi.fn(),
+	},
+	consumeStartWithoutMediaPending: vi.fn(() => false),
+}))
+
+describe('CallView.vue', () => {
+	const TOKEN = 'XXTOKENXX'
+
+	let store
+	let tokenStore
+	let callViewStore
+
+	beforeAll(() => {
+		// A single pinia for the whole file: the call views mounted by the
+		// tests keep running and would otherwise write to a stale one
+		setActivePinia(createPinia())
+
+		tokenStore = useTokenStore()
+		callViewStore = useCallViewStore()
+
+		store = createStore({
+			getters: {
+				conversation: () => () => ({ token: TOKEN }),
+			},
+		})
+	})
+
+	beforeEach(() => {
+		callViewStore.$reset()
+		// The call view of the viewed conversation, as opposed to the overlay
+		// shown while another conversation is browsed
+		tokenStore.token = TOKEN
+
+		callParticipantCollection.callParticipantModels.splice(0)
+		localMediaModel.attributes.localScreen = null
+	})
+
+	/**
+	 * A minimal stand-in for a CallParticipantModel.
+	 *
+	 * @param {string} peerId peer id of the participant
+	 * @param {object} attributes attributes to set besides the peer id
+	 */
+	function addCallParticipantModel(peerId, attributes = {}) {
+		const model = {
+			attributes: reactive({
+				peerId,
+				name: peerId,
+				screen: null,
+				videoAvailable: false,
+				audioAvailable: false,
+				internal: false,
+				...attributes,
+			}),
+			setVideoBlocked: vi.fn(),
+			setSimulcastVideoQuality: vi.fn(),
+		}
+
+		callParticipantCollection.callParticipantModels.push(model)
+
+		return model
+	}
+
+	/**
+	 * @param {string} token conversation the call is in
+	 */
+	function mountCallView(token = TOKEN) {
+		return shallowMount(CallView, {
+			props: { token },
+			global: {
+				plugins: [store],
+			},
+		})
+	}
+
+	// The call view is created again during an ongoing call when coming back to
+	// it after browsing another conversation, so whatever is shared at that
+	// point was shared before the call view existed.
+	describe('screens shared before the call view is created', () => {
+		it('shows a remote screen shared before the call view was created', () => {
+			addCallParticipantModel('peer-id', { screen: {} })
+
+			const wrapper = mountCallView()
+
+			expect(wrapper.vm.screens).toEqual(['peer-id'])
+			expect(wrapper.vm.showRemoteScreen).toBe(true)
+			expect(wrapper.findComponent(ScreenShare).exists()).toBe(true)
+		})
+
+		it('shows a local screen shared before the call view was created', () => {
+			localMediaModel.attributes.localScreen = {}
+
+			const wrapper = mountCallView()
+
+			expect(wrapper.vm.screens).toEqual([localCallParticipantModel.attributes.peerId])
+			expect(wrapper.vm.showLocalScreen).toBe(true)
+		})
+
+		it('marks the shown screen as visible', () => {
+			addCallParticipantModel('peer-id', { screen: {} })
+
+			const wrapper = mountCallView()
+
+			expect(wrapper.vm.sharedDatas['peer-id'].screenVisible).toBe(true)
+			expect(wrapper.vm.localSharedData.screenVisible).toBe(false)
+		})
+
+		it('does not report a screen when none is shared', () => {
+			addCallParticipantModel('peer-id')
+
+			const wrapper = mountCallView()
+
+			expect(wrapper.vm.screens).toEqual([])
+			expect(wrapper.vm.showRemoteScreen).toBe(false)
+		})
+	})
+
+	describe('screens shared while the call view exists', () => {
+		it('shows a screen started after the call view was created', async () => {
+			const model = addCallParticipantModel('peer-id')
+			const wrapper = mountCallView()
+
+			model.attributes.screen = {}
+			await wrapper.vm.$nextTick()
+
+			expect(wrapper.vm.screens).toEqual(['peer-id'])
+		})
+
+		it('lists a screen only once when its stream is replaced', async () => {
+			const model = addCallParticipantModel('peer-id', { screen: {} })
+			const wrapper = mountCallView()
+
+			model.attributes.screen = {}
+			await wrapper.vm.$nextTick()
+
+			expect(wrapper.vm.screens).toEqual(['peer-id'])
+		})
+
+		it('removes the screen when the sharing stops', async () => {
+			const model = addCallParticipantModel('peer-id', { screen: {} })
+			const wrapper = mountCallView()
+
+			model.attributes.screen = null
+			await wrapper.vm.$nextTick()
+
+			expect(wrapper.vm.screens).toEqual([])
+		})
+	})
+})
