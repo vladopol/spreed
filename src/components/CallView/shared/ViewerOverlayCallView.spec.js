@@ -212,4 +212,47 @@ describe('ViewerOverlayCallView.vue', () => {
 			wrapper.unmount()
 		})
 	})
+	// The overlay is made to sit on top of the viewer, but nothing else layered
+	// over a browsed conversation should be covered by the call
+	describe('stacking', () => {
+		afterEach(() => {
+			// The "viewer is open" state is shared app-wide
+			document.querySelectorAll('.viewer-overlay').forEach((overlay) => overlay.remove())
+		})
+
+		it('goes behind dialogs while another conversation is browsed', () => {
+			tokenStore.token = TOKEN
+
+			const wrapper = mountOverlay(CALL_TOKEN)
+
+			expect(wrapper.vm.isBelowDialogs).toBe(true)
+			expect(document.querySelector('.viewer-overlay--below-dialogs')).not.toBe(null)
+
+			wrapper.unmount()
+		})
+
+		it('stays on top while the viewer is open', async () => {
+			tokenStore.token = TOKEN
+
+			const wrapper = mountOverlay(CALL_TOKEN)
+			wrapper.vm.isViewerOpen = true
+			await wrapper.vm.$nextTick()
+
+			expect(wrapper.vm.isBelowDialogs).toBe(false)
+			expect(document.querySelector('.viewer-overlay--below-dialogs')).toBe(null)
+
+			wrapper.vm.isViewerOpen = false
+			wrapper.unmount()
+		})
+
+		it('stays on top when it is the overlay of the viewer', () => {
+			tokenStore.token = CALL_TOKEN
+
+			const wrapper = mountOverlay(CALL_TOKEN)
+
+			expect(wrapper.vm.isBelowDialogs).toBe(false)
+
+			wrapper.unmount()
+		})
+	})
 })
