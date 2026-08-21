@@ -5,7 +5,7 @@
 
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createStore } from 'vuex'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import ViewerOverlayCallView from './ViewerOverlayCallView.vue'
@@ -43,9 +43,12 @@ describe('ViewerOverlayCallView.vue', () => {
 
 	/**
 	 * @param {string} token conversation the call belongs to
+	 * @param {object} options mounting options
+	 * @param {HTMLElement} [options.attachTo] element to mount the overlay into
 	 */
-	function mountOverlay(token) {
+	function mountOverlay(token, { attachTo } = {}) {
 		return mount(ViewerOverlayCallView, {
+			attachTo,
 			props: {
 				token,
 				localModel: { attributes: { videoEnabled: false, localScreen: null } },
@@ -131,6 +134,82 @@ describe('ViewerOverlayCallView.vue', () => {
 
 			expect(push).not.toHaveBeenCalled()
 			push.mockRestore()
+		})
+	})
+	describe('positioning', () => {
+		const CHAT_MESSAGES_BOTTOM = 500
+
+		let mainView
+
+		beforeEach(() => {
+			mainView = document.createElement('div')
+			mainView.className = 'main-view'
+			document.body.appendChild(mainView)
+		})
+
+		afterEach(() => {
+			mainView.remove()
+		})
+
+		/**
+		 * The chat of the browsed conversation, ending above its message input.
+		 */
+		function addChatMessagesArea() {
+			const chatMessagesArea = document.createElement('div')
+			chatMessagesArea.className = 'messages-list-dragover-wrapper'
+			chatMessagesArea.getBoundingClientRect = () => ({ bottom: CHAT_MESSAGES_BOTTOM })
+			mainView.appendChild(chatMessagesArea)
+
+			return chatMessagesArea
+		}
+
+		it('sits above the message input of the browsed conversation', () => {
+			tokenStore.token = TOKEN
+			addChatMessagesArea()
+
+			const wrapper = mountOverlay(CALL_TOKEN, { attachTo: mainView })
+
+			expect(wrapper.vm.isAboveChatInput).toBe(true)
+			expect(wrapper.vm.position.bottom).toBe(window.innerHeight - CHAT_MESSAGES_BOTTOM)
+
+			wrapper.unmount()
+		})
+
+		it('follows the message input when it grows', async () => {
+			tokenStore.token = TOKEN
+			const chatMessagesArea = addChatMessagesArea()
+
+			const wrapper = mountOverlay(CALL_TOKEN, { attachTo: mainView })
+			chatMessagesArea.getBoundingClientRect = () => ({ bottom: CHAT_MESSAGES_BOTTOM - 100 })
+			wrapper.vm.updatePosition()
+
+			expect(wrapper.vm.position.bottom).toBe(window.innerHeight - CHAT_MESSAGES_BOTTOM + 100)
+
+			wrapper.unmount()
+		})
+
+		it('keeps the position of the ghost when the call conversation is viewed', () => {
+			tokenStore.token = CALL_TOKEN
+			addChatMessagesArea()
+
+			const wrapper = mountOverlay(CALL_TOKEN, { attachTo: mainView })
+
+			// The ghost is not laid out in jsdom, so it reports an empty rect
+			expect(wrapper.vm.isAboveChatInput).toBe(false)
+			expect(wrapper.vm.position.bottom).toBe(window.innerHeight)
+
+			wrapper.unmount()
+		})
+
+		it('falls back to the ghost when the conversation has no chat', () => {
+			tokenStore.token = TOKEN
+
+			const wrapper = mountOverlay(CALL_TOKEN, { attachTo: mainView })
+
+			expect(wrapper.vm.isAboveChatInput).toBe(false)
+			expect(wrapper.vm.position.bottom).toBe(window.innerHeight)
+
+			wrapper.unmount()
 		})
 	})
 })

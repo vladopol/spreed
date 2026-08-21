@@ -9,6 +9,7 @@
 			<!-- Add .app-talk to use Talk icon classes outside of #content-vue -->
 			<div
 				class="viewer-overlay app-talk"
+				:class="{ 'viewer-overlay--above-chat-input': isAboveChatInput }"
 				:style="computedStyle">
 				<div
 					class="viewer-overlay__collapse"
@@ -212,6 +213,11 @@ export default {
 		return {
 			isCollapsed: false,
 			observer: null,
+			// The message area the overlay is placed above while another
+			// conversation is browsed, if any. Kept only to stop observing it
+			// once it is gone.
+			observedChatMessagesArea: null,
+			isAboveChatInput: false,
 			position: {
 				right: 0,
 				left: 0,
@@ -251,10 +257,18 @@ export default {
 		},
 	},
 
+	watch: {
+		'tokenStore.token': function() {
+			// Another conversation is browsed now, so the chat the overlay is
+			// placed above may be a different element.
+			this.$nextTick(this.observeChatMessagesArea)
+		},
+	},
+
 	mounted() {
-		this.updatePosition()
 		this.observer = new ResizeObserver(this.updatePosition)
 		this.observer.observe(this.$refs.ghost)
+		this.observeChatMessagesArea()
 	},
 
 	beforeUnmount() {
@@ -284,6 +298,45 @@ export default {
 			})
 		},
 
+		/**
+		 * The messages of the browsed conversation, that is everything of its
+		 * chat above the message input.
+		 *
+		 * The overlay is anchored to the bottom of the call container, which
+		 * while another conversation is browsed spans the whole chat: the
+		 * overlay would cover the message input and its send button. It is
+		 * placed above the messages instead, which also makes it follow the
+		 * input as that one grows with the message being written.
+		 *
+		 * @return {HTMLElement|null} the element to place the overlay above, or
+		 *         null when the overlay is used over the viewer as upstream does
+		 */
+		getChatMessagesArea() {
+			if (!this.isCallInAnotherConversation) {
+				return null
+			}
+
+			return this.$refs.ghost?.closest('.main-view')?.querySelector('.messages-list-dragover-wrapper') ?? null
+		},
+
+		observeChatMessagesArea() {
+			const chatMessagesArea = this.getChatMessagesArea()
+
+			if (chatMessagesArea !== this.observedChatMessagesArea) {
+				if (this.observedChatMessagesArea) {
+					this.observer.unobserve(this.observedChatMessagesArea)
+				}
+				// The messages shrink when the message input grows, so
+				// observing them is what keeps the overlay above the input.
+				if (chatMessagesArea) {
+					this.observer.observe(chatMessagesArea)
+				}
+				this.observedChatMessagesArea = chatMessagesArea
+			}
+
+			this.updatePosition()
+		},
+
 		updatePosition() {
 			const { left, right, bottom } = this.$refs.ghost.getBoundingClientRect()
 			if (isRTL()) {
@@ -291,7 +344,10 @@ export default {
 			} else {
 				this.position.right = window.innerWidth - right
 			}
-			this.position.bottom = window.innerHeight - bottom
+
+			const chatMessagesArea = this.getChatMessagesArea()
+			this.isAboveChatInput = Boolean(chatMessagesArea)
+			this.position.bottom = window.innerHeight - (chatMessagesArea?.getBoundingClientRect().bottom ?? bottom)
 		},
 	},
 }
@@ -315,6 +371,13 @@ export default {
 	max-width: var(--max-width);
 	min-height: calc(var(--default-clickable-area) + 8px);
 	z-index: 11000;
+}
+
+// Placed above the messages of the browsed conversation, which end right above
+// the "scroll to bottom" button: leave room for that button as well, as it is
+// anchored on top of the message input and would otherwise be covered.
+.viewer-overlay--above-chat-input {
+	margin-bottom: calc(var(--default-clickable-area) + 8px);
 }
 
 .viewer-overlay * {
