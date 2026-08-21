@@ -668,6 +668,19 @@ export default {
 		// Ensure that data is properly initialized before mounting the
 		// subviews.
 		this.updateDataFromCallParticipantModels(this.callParticipantModels)
+
+		// The shared screens are tracked by watchers, and those only fire on
+		// changes, so a screen that is already being shared when this call view
+		// is created has to be picked up explicitly. This is not only about the
+		// very first moments of a call: the call view is created again during an
+		// ongoing call when coming back to it after browsing another
+		// conversation, and without this the shared screen would not be
+		// recognized as such at all - it would be rendered inside the promoted
+		// video instead of as the screen of the call, showing the participant
+		// name twice.
+		if (this.localScreen) {
+			this._setScreenAvailable(localCallParticipantModel.attributes.peerId, this.localScreen)
+		}
 	},
 
 	mounted() {
@@ -794,6 +807,11 @@ export default {
 					this._handleParticipantRaisedHand(addedModel, raisedHand)
 				})
 
+				// Like the local screen in "created", a screen already shared by
+				// the participant when their model is added is not seen by the
+				// watcher above, which only fires on changes.
+				this._setScreenAvailable(addedModel.attributes.peerId, addedModel.attributes.screen)
+
 				this.adjustSimulcastQualityForParticipant(addedModel)
 			})
 		},
@@ -856,7 +874,13 @@ export default {
 
 		_setScreenAvailable(id, screen) {
 			if (screen) {
-				this.screens.unshift(id)
+				// The same screen can be announced more than once (a model can
+				// be added with its screen already set and then replace that
+				// stream), and a screen listed twice would never be removed
+				// again.
+				if (!this.screens.includes(id)) {
+					this.screens.unshift(id)
+				}
 
 				return
 			}
