@@ -22,7 +22,6 @@ import { useJoinCall } from '../composables/useJoinCall.ts'
 import { watchJoinedConversation } from '../composables/useJoinedConversation.ts'
 import { CALL, CONVERSATION } from '../constants.ts'
 import { useActorStore } from '../stores/actor.ts'
-import { useCallViewStore } from '../stores/callView.ts'
 import { useSettingsStore } from '../stores/settings.ts'
 import { useTokenStore } from '../stores/token.ts'
 import { hasExternalCallService, isConversationPhoneRoom } from '../utils/conversation.ts'
@@ -40,7 +39,6 @@ const route = useRoute()
 const actorStore = useActorStore()
 const settingsStore = useSettingsStore()
 const tokenStore = useTokenStore()
-const callViewStore = useCallViewStore()
 
 /** Internal handlers for 'joined-conversation' watcher (direct-call) */
 let unwatchJoinedConversation: WatchStopHandle | undefined
@@ -57,14 +55,10 @@ function stopWatchingJoinedConversation() {
 const isInLobby = computed(() => store.getters.isInLobby)
 const connectionFailed = computed(() => store.getters.connectionFailed(props.token))
 const isVoiceRoom = computed(() => Boolean(store.getters.conversation(props.token)?.attributes & CONVERSATION.ATTRIBUTE.VOICE_ROOM))
+// The call view of such a conversation shows itself as the compact overlay,
+// see CallView's "isViewerOverlay"
 const callInAnotherConversation = computed(() => Boolean(tokenStore.activeCallToken)
 	&& tokenStore.activeCallToken !== props.token)
-
-watch(callInAnotherConversation, (value) => {
-	// The call view of a conversation that is not the viewed one is only ever
-	// shown as the compact overlay
-	callViewStore.setIsViewerOverlay(value)
-}, { immediate: true })
 
 const isInExternalCall = computed(() => {
 	const conversation = store.getters.conversation(props.token) as Conversation | undefined
