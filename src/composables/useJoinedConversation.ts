@@ -54,6 +54,7 @@ export function watchJoinedConversation(
 	options?: WatchOptions,
 ): WatchStopHandle {
 	const currentJoinedConversation = useJoinedConversation()
+	let fired = false
 
 	logIssue1777('watchJoinedConversation registered', {
 		targetToken: toValue(token),
@@ -62,7 +63,7 @@ export function watchJoinedConversation(
 		willFireImmediatelyDueToStaleMatch: Boolean(options?.immediate) && currentJoinedConversation.value === toValue(token),
 	}, true)
 
-	return watch(currentJoinedConversation, (newToken, oldToken, onCleanup) => {
+	const stop = watch(currentJoinedConversation, (newToken, oldToken, onCleanup) => {
 		const targetToken = toValue(token)
 		const matched = Boolean(targetToken) && newToken === targetToken
 		logIssue1777('watchJoinedConversation fired', { newToken, oldToken, targetToken, matched })
@@ -71,6 +72,20 @@ export function watchJoinedConversation(
 		}
 
 		logIssue1777('watchJoinedConversation MATCHED, invoking callback (triggers joinCall)', { newToken, targetToken }, true)
+		fired = true
 		callback(newToken, oldToken, onCleanup)
 	}, options)
+
+	// With `immediate: true` and an already-matching value, the callback above ran
+	// synchronously - before `stop` existed, so a caller that releases the watcher
+	// from its own callback released `undefined` and the watcher stayed alive for
+	// the rest of the session (nextcloud/talk-desktop#1777). Release it here.
+	if (fired) {
+		logIssue1777('watchJoinedConversation released after synchronous immediate firing', {
+			targetToken: toValue(token),
+		}, true)
+		stop()
+	}
+
+	return stop
 }
