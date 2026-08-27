@@ -797,10 +797,11 @@ export default {
 				return
 			}
 			this.callViewStore.setSelectedVideoPeerId(peerId)
+			// The stripe is left as the user set it. It is collapsed
+			// automatically only for a starting screen share.
 			this.callViewStore.setCallViewMode({
 				token: this.token,
 				isGrid: false,
-				isStripeOpen: false,
 				clearLast: false,
 			})
 		},
@@ -815,7 +816,6 @@ export default {
 			this.callViewStore.setCallViewMode({
 				token: this.token,
 				isGrid: false,
-				isStripeOpen: false,
 				clearLast: false,
 			})
 		},

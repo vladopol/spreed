@@ -66,6 +66,7 @@ describe('CallView.vue', () => {
 
 		callParticipantCollection.callParticipantModels.splice(0)
 		localMediaModel.attributes.localScreen = null
+		localMediaModel.attributes.videoEnabled = false
 	})
 
 	/**
@@ -212,6 +213,52 @@ describe('CallView.vue', () => {
 
 			expect(wrapper.vm.isViewerOverlay).toBe(false)
 			expect(wrapper.findComponent(ViewerOverlayCallView).exists()).toBe(false)
+		})
+	})
+
+	// The stripe is collapsed automatically only for a starting screen share.
+	// Picking someone to follow is not that: what the user opened by hand has
+	// to stay open.
+	describe('following a participant', () => {
+		it('promotes the participant and leaves the grid', () => {
+			addCallParticipantModel('peer-id')
+			callViewStore.setCallViewMode({ token: TOKEN, isGrid: true })
+			const wrapper = mountCallView()
+
+			wrapper.vm.handleSelectVideo('peer-id')
+
+			expect(callViewStore.selectedVideoPeerId).toBe('peer-id')
+			expect(callViewStore.isGrid).toBe(false)
+		})
+
+		it('keeps the stripe open', () => {
+			addCallParticipantModel('peer-id')
+			const wrapper = mountCallView()
+
+			wrapper.vm.handleSelectVideo('peer-id')
+
+			expect(callViewStore.isStripeOpen).toBe(true)
+		})
+
+		it('keeps the stripe collapsed when the user collapsed it', () => {
+			addCallParticipantModel('peer-id')
+			callViewStore.setCallViewMode({ token: TOKEN, isStripeOpen: false })
+			const wrapper = mountCallView()
+
+			wrapper.vm.handleSelectVideo('peer-id')
+
+			expect(callViewStore.isStripeOpen).toBe(false)
+		})
+
+		it('keeps the stripe open when following own video', () => {
+			localMediaModel.attributes.videoEnabled = true
+			const wrapper = mountCallView()
+
+			wrapper.vm.handleClickLocalVideo()
+
+			expect(callViewStore.selectedVideoPeerId).toBe('local')
+			expect(callViewStore.isGrid).toBe(false)
+			expect(callViewStore.isStripeOpen).toBe(true)
 		})
 	})
 })
