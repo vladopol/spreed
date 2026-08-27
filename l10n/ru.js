@@ -1137,8 +1137,6 @@ OC.L10N.register(
     "Camera" : "Камера",
     "Show presenter" : "показать выступающего",
     "You" : "Вы",
-    "You are sharing a screen" : "Вы транслируете экран",
-    "Sharing this window may cause a mirroring effect" : "Трансляция этого окна может вызвать эффект зеркального отражения",
     "Stop screensharing" : "Прекратить трансляцию экрана",
     "Dismiss" : "Отклонить",
     "Mute" : "Отключить звук",
