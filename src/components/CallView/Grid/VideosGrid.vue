@@ -48,7 +48,11 @@
 						@wheel="debounceHandleWheelEvent"
 						@keydown="handleMovement">
 						<template v-if="!devMode && !(isLessThanTwoVideos && isStripe)">
-							<EmptyCallView v-if="videos.length === 0 && !isStripe" class="video" :isGrid="true" />
+							<EmptyCallView
+								v-if="videos.length === 0 && !isStripe"
+								class="video"
+								:token="token"
+								:isGrid="true" />
 							<VideoVue
 								v-for="callParticipantModel in displayedVideos"
 								:key="callParticipantModel.attributes.peerId"

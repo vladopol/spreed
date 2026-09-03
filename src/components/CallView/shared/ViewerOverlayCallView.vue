@@ -75,7 +75,7 @@
 							<template #bottomBar />
 						</VideoVue>
 
-						<EmptyCallView v-else isSmall />
+						<EmptyCallView v-else :token="token" isSmall />
 
 						<LocalVideo
 							v-if="localModel.attributes.videoEnabled"
