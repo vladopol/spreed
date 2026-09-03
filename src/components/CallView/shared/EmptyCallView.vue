@@ -66,21 +66,36 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+
+		/**
+		 * The conversation of the call this view belongs to. It is not always
+		 * the viewed one: while another conversation is browsed during a call,
+		 * the call view is shown as the overlay over that conversation.
+		 * Defaults to the viewed conversation.
+		 */
+		token: {
+			type: String,
+			default: '',
+		},
 	},
 
 	setup() {
 		return {
-			token: useGetToken(),
+			currentToken: useGetToken(),
 		}
 	},
 
 	computed: {
+		callToken() {
+			return this.token || this.currentToken
+		},
+
 		isConnecting() {
-			return this.$store.getters.isConnecting(this.token)
+			return this.$store.getters.isConnecting(this.callToken)
 		},
 
 		conversation() {
-			return this.$store.getters.conversation(this.token)
+			return this.$store.getters.conversation(this.callToken)
 		},
 
 		isGroupConversation() {
@@ -183,7 +198,7 @@ export default {
 	methods: {
 		t,
 		handleCopyLink() {
-			copyConversationLinkToClipboard(this.token)
+			copyConversationLinkToClipboard(this.callToken)
 		},
 	},
 }

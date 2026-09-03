@@ -47,7 +47,11 @@
 						:style="gridStyle"
 						@wheel="debounceHandleWheelEvent">
 						<template v-if="!devMode">
-							<EmptyCallView v-if="orderedVideos.length === 0 && !isStripe" class="video" :isGrid="true" />
+							<EmptyCallView
+								v-if="orderedVideos.length === 0 && !isStripe"
+								class="video"
+								:token="token"
+								:isGrid="true" />
 							<VideoVue
 								v-for="(callParticipantModel, index) in displayedVideos"
 								:key="callParticipantModel.attributes.peerId"
