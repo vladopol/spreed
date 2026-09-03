@@ -19,7 +19,7 @@
 			:localSharedData="localSharedData" />
 
 		<template v-else>
-			<EmptyCallView v-if="showEmptyCallView" :isSidebar="isSidebar" />
+			<EmptyCallView v-if="showEmptyCallView" :token="token" :isSidebar="isSidebar" />
 
 			<div id="videos" :class="{ 'is-sidebar': isSidebar }">
 				<div
