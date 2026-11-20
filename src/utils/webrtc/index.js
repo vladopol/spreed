@@ -239,6 +239,12 @@ function setupWebRtc() {
 	signaling.on('sessionId', (sessionId) => {
 		localCallParticipantModel.setPeerId(sessionId)
 	})
+
+	// Remote control during screen sharing lives in Talk Desktop, which only needs the
+	// call's signaling, its participants and the local screen share
+	if (IS_DESKTOP) {
+		window.OCA.Talk.Desktop.remoteControl?.attach({ signaling, callParticipantCollection, localMediaModel })
+	}
 }
 
 /**

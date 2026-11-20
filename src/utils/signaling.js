@@ -803,6 +803,9 @@ Signaling.Standalone.prototype.connect = function() {
 				break
 			case 'message':
 				data.message.data.from = data.message.sender.sessionid
+				// Set by the server like the session id, so it cannot be forged by the
+				// sender. Used by the remote control of Talk Desktop to know who asks.
+				data.message.data.fromUserId = data.message.sender.userid || ''
 				this._trigger('message', [data.message.data])
 				break
 			case 'control':

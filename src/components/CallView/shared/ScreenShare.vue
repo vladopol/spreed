@@ -6,6 +6,7 @@
 <template>
 	<div
 		:id="screenContainerId"
+		ref="container"
 		class="screenContainer"
 		@dblclick.capture="onDoubleClick">
 		<video
@@ -40,7 +41,7 @@
 			</template>
 		</NcEmptyContent>
 		<VideoBottomBar
-			v-if="isBig"
+			v-if="isBig && !remoteControlled"
 			:token="token"
 			:sharedData="sharedData"
 			isBig
@@ -56,7 +57,7 @@ import { t } from '@nextcloud/l10n'
 import Hex from 'crypto-js/enc-hex.js'
 import SHA1 from 'crypto-js/sha1.js'
 import panzoom from 'panzoom'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import IconMonitorScreenshot from 'vue-material-design-icons/MonitorScreenshot.vue'
@@ -114,6 +115,7 @@ export default {
 	setup(props) {
 		const guestNameStore = useGuestNameStore()
 
+		const container = ref(null)
 		const screen = ref(null)
 		const instance = ref(null)
 		const instanceTransform = ref({ x: 0, y: 0, scale: 1 })
@@ -155,10 +157,48 @@ export default {
 					instanceGrabbing.value = false
 				})
 			}
+			mountRemoteControl()
 		})
 		onBeforeUnmount(() => {
+			unmountRemoteControl?.()
 			instance.value?.dispose()
 		})
+
+		/*
+		 * Remote control of Talk Desktop: a layer over the big screen of another participant.
+		 * While it controls, the wheel, double clicks and drags go to the presenter, so the
+		 * zoom is paused (a zoom set before is kept) and the bottom bar, which lies exactly
+		 * where the presenter's taskbar is, is hidden.
+		 */
+		const remoteControlled = ref(false)
+		let unmountRemoteControl = null
+
+		/**
+		 * Mount the remote control layer for the shown screen, if any
+		 */
+		function mountRemoteControl() {
+			unmountRemoteControl?.()
+			unmountRemoteControl = null
+			remoteControlled.value = false
+			const remoteControl = IS_DESKTOP ? window.OCA.Talk.Desktop.remoteControl : null
+			if (!remoteControl || !props.isBig || !props.callParticipantModel || !container.value) {
+				return
+			}
+			unmountRemoteControl = remoteControl.mountScreen({
+				container: container.value,
+				video: screen.value,
+				peerId: props.callParticipantModel.attributes.peerId,
+				setControlled(controlled) {
+					remoteControlled.value = controlled
+					if (controlled) {
+						instance.value?.pause()
+					} else {
+						instance.value?.resume()
+					}
+				},
+			})
+		}
+		watch(() => [props.isBig, props.callParticipantModel?.attributes.peerId], mountRemoteControl)
 
 		/**
 		 * Overriding method to handle double click event on screen share
@@ -166,7 +206,7 @@ export default {
 		 * @param event Double click event
 		 */
 		function onDoubleClick(event) {
-			if (!instance.value) {
+			if (!instance.value || remoteControlled.value) {
 				return
 			}
 
@@ -190,7 +230,9 @@ export default {
 
 		return {
 			guestNameStore,
+			container,
 			screen,
+			remoteControlled,
 			screenClass,
 			onDoubleClick,
 			// Mirror fix
