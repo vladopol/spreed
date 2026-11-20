@@ -58,6 +58,16 @@ const liveTranscriptionStore = useLiveTranscriptionStore()
 const settingsStore = useSettingsStore()
 
 const isLiveTranscriptionLoading = ref(false)
+
+const isDesktop = IS_DESKTOP
+const remoteControlButton = useTemplateRef<HTMLElement>('remoteControlButton')
+let unmountRemoteControlButton: (() => void) | null = null
+onMounted(() => {
+	if (isDesktop && remoteControlButton.value) {
+		unmountRemoteControlButton = window.OCA.Talk.Desktop.remoteControl?.mountCallButton?.(remoteControlButton.value) ?? null
+	}
+})
+onUnmounted(() => unmountRemoteControlButton?.())
 const bottomBar = useTemplateRef('bottomBar')
 const callButtonWithActions = useTemplateRef('callButtonWithActions')
 
@@ -516,6 +526,9 @@ function setCallLayout(layout: CallLayout) {
 				:token="token"
 				:localMediaModel="localMediaModel"
 				:localCallParticipantModel="localCallParticipantModel" />
+
+			<!-- Remote control of Talk Desktop: "Request control" for the shown screen share -->
+			<span v-if="!isSidebar && isDesktop" ref="remoteControlButton" class="bottom-bar-remote-control" />
 
 			<div
 				v-if="!isSidebar && isLiveTranscriptionSupported && !hidingList.liveTranscription"

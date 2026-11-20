@@ -55,6 +55,12 @@ declare global {
 				Desktop?: IS_DESKTOP extends true
 					? {
 							getDesktopMediaSource?: () => void
+							/** Remote control during screen sharing, see REMOTE-CONTROL.md of Talk Desktop */
+							remoteControl?: {
+								attach: (options: object) => void
+								mountScreen: (options: object) => () => void
+								mountCallButton: (element: HTMLElement) => () => void
+							}
 						}
 					: never
 
