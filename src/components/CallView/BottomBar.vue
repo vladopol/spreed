@@ -520,15 +520,16 @@ function setCallLayout(layout: CallLayout) {
 				:hideVirtualBackgroundShortcut="hidingList.virtualBackground"
 				:localCallParticipantModel="localCallParticipantModel" />
 
+			<!-- Remote control of Talk Desktop: "Request control" for the shown screen share,
+				next to the screen share button that ends the media controls -->
+			<span v-if="!isSidebar && isDesktop" ref="remoteControlButton" class="bottom-bar-remote-control" />
+
 			<!-- Reactions menu -->
 			<ReactionMenu
 				v-if="!isSidebar"
 				:token="token"
 				:localMediaModel="localMediaModel"
 				:localCallParticipantModel="localCallParticipantModel" />
-
-			<!-- Remote control of Talk Desktop: "Request control" for the shown screen share -->
-			<span v-if="!isSidebar && isDesktop" ref="remoteControlButton" class="bottom-bar-remote-control" />
 
 			<div
 				v-if="!isSidebar && isLiveTranscriptionSupported && !hidingList.liveTranscription"
