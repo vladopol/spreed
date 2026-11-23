@@ -60,6 +60,7 @@ declare global {
 								attach: (options: object) => void
 								mountScreen: (options: object) => () => void
 								mountCallButton: (element: HTMLElement) => () => void
+								mountToolbarSlot?: (element: HTMLElement) => () => void
 							}
 						}
 					: never

@@ -95,6 +95,9 @@
 				</div>
 			</a>
 
+			<!-- Talk Desktop puts the remote control toolbar here, out of the shared screen -->
+			<div v-if="isDesktop && isInCall" :ref="setRemoteControlSlot" class="top-bar__remote-control" />
+
 			<div class="top-bar__controls">
 				<TasksCounter v-if="conversation.type === CONVERSATION.TYPE.NOTE_TO_SELF" />
 
@@ -252,7 +255,26 @@ export default {
 	},
 
 	setup() {
+		let remoteControlSlot = null
+		let unmountRemoteControlSlot = null
+		/**
+		 * @param {HTMLElement|null} element - The mount point, null when it is removed
+		 */
+		function setRemoteControlSlot(element) {
+			if (element === remoteControlSlot) {
+				return
+			}
+			unmountRemoteControlSlot?.()
+			unmountRemoteControlSlot = null
+			remoteControlSlot = element
+			if (element) {
+				unmountRemoteControlSlot = window.OCA.Talk.Desktop?.remoteControl?.mountToolbarSlot?.(element) ?? null
+			}
+		}
+
 		return {
+			isDesktop: IS_DESKTOP,
+			setRemoteControlSlot,
 			AVATAR,
 			PARTICIPANT,
 			groupwareStore: useGroupwareStore(),
@@ -469,6 +491,17 @@ export default {
 	gap: 3px;
 	align-items: center;
 	justify-content: flex-end;
+}
+
+.top-bar__remote-control {
+	display: flex;
+	flex: 0 1 auto;
+	justify-content: flex-end;
+	min-width: 0;
+
+	&:empty {
+		display: none;
+	}
 }
 
 .top-bar__controls {
